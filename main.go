@@ -14,7 +14,7 @@ func main() {
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:3000"}
 	router.Use(cors.New(config))
-	router.GET("/nodes", getNodes)
+	router.GET("/board", getBoard)
 	router.GET("/moves", getMoves)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
@@ -31,12 +31,12 @@ var moves = []move{}
 
 // var groups = map[uint]map[uint]bool{}
 
-// type node struct {
-// 	Color string `json:"color"`
-// 	Group uint   `json:"group"`
-// }
+type point struct {
+	Color string `json:"color"`
+	Group uint   `json:"group"`
+}
 
-var nodes [][]string = generateBoard(boardSize)
+var board [][]string = generateBoard(boardSize)
 
 const boardSize = 9
 
@@ -52,8 +52,8 @@ func generateBoard(size int) [][]string {
 	return board
 }
 
-func getNodes(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, nodes)
+func getBoard(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, board)
 }
 
 func getMoves(c *gin.Context) {
@@ -70,8 +70,8 @@ func postMove(c *gin.Context) {
 
 	outOfRangeXY := newMove.X > 2 || newMove.X < 0 || newMove.Y > 2 || newMove.Y < 0
 	invalidColor := newMove.Color != "white" && newMove.Color != "black"
-	nodeUnavailable := nodes[newMove.Y][newMove.X] != ""
-	if outOfRangeXY || invalidColor || nodeUnavailable {
+	pointUnavailable := board[newMove.Y][newMove.X] != ""
+	if outOfRangeXY || invalidColor || pointUnavailable {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 		return
 	}
@@ -83,7 +83,7 @@ func postMove(c *gin.Context) {
 	// 	[2]int{newMove.Y, newMove.X - 1},
 	// }
 
-	nodes[newMove.Y][newMove.X] = newMove.Color
+	board[newMove.Y][newMove.X] = newMove.Color
 	newMove.ID = len(moves)
 	moves = append(moves, newMove)
 	c.IndentedJSON(http.StatusCreated, newMove)
