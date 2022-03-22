@@ -9,7 +9,6 @@ import (
 )
 
 func main() {
-
 	router := gin.Default()
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:3000"}
@@ -20,44 +19,32 @@ func main() {
 	router.Run("localhost:8080")
 }
 
-type move struct {
-	ID    int    `json:"id"`
-	X     int    `json:"x"`
-	Y     int    `json:"y"`
-	Color string `json:"color"`
-}
-
 var moves = []move{}
 
 // var groups = map[uint]map[uint]bool{}
 
-type point struct {
-	Color string `json:"color"`
-	Group uint   `json:"group"`
-}
-
-var board [][]string = generateBoard(boardSize)
-
-const boardSize = 9
-
-func generateBoard(size int) [][]string {
-	var board = [][]string{}
-	for y := 0; y < size; y++ {
-		col := []string{}
-		for x := 0; x < size; x++ {
-			col = append(col, "")
-		}
-		board = append(board, col)
-	}
-	return board
-}
-
 func getBoard(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, board)
+	// remove all data not required by frontend application before sending
+	var simpleBoard [][]string
+	for _, row := range board {
+		var simpleRow []string
+		for _, point := range row {
+			simpleRow = append(simpleRow, point.Color)
+		}
+		simpleBoard = append(simpleBoard, simpleRow)
+	}
+	c.IndentedJSON(http.StatusOK, simpleBoard)
 }
 
 func getMoves(c *gin.Context) {
 	c.IndentedJSON(http.StatusOK, moves)
+}
+
+func isInvalidMove(newMove move) bool {
+	outOfRangeXY := newMove.X >= boardSize || newMove.X < 0 || newMove.Y >= boardSize || newMove.Y < 0
+	invalidColor := newMove.Color != "white" && newMove.Color != "black"
+	pointUnavailable := board[newMove.Y][newMove.X].Color != ""
+	return outOfRangeXY || invalidColor || pointUnavailable
 }
 
 func postMove(c *gin.Context) {
@@ -68,23 +55,38 @@ func postMove(c *gin.Context) {
 		return
 	}
 
-	outOfRangeXY := newMove.X > 2 || newMove.X < 0 || newMove.Y > 2 || newMove.Y < 0
-	invalidColor := newMove.Color != "white" && newMove.Color != "black"
-	pointUnavailable := board[newMove.Y][newMove.X] != ""
-	if outOfRangeXY || invalidColor || pointUnavailable {
+	if isInvalidMove(newMove) {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 		return
 	}
 
-	// boundary := [4][2]int{
-	// 	[2]int{newMove.Y + 1, newMove.X},
-	// 	[2]int{newMove.Y, newMove.X + 1},
-	// 	[2]int{newMove.Y - 1, newMove.X},
-	// 	[2]int{newMove.Y, newMove.X - 1},
-	// }
+	board[newMove.Y][newMove.X] = point{Color: newMove.Color, Group: 0}
 
-	board[newMove.Y][newMove.X] = newMove.Color
 	newMove.ID = len(moves)
 	moves = append(moves, newMove)
 	c.IndentedJSON(http.StatusCreated, newMove)
 }
+
+// func createPointFromMove(newMove move) point {
+// var x, y int = newMove.X, newMove.Y + 1
+
+// list groups found at adjacent points
+
+// select the first group found of same color
+
+// if no same-color groups found, create a new group with unique id
+
+// categorize remaining adjacent points as liberties or non liberties
+
+// add adjacent points to selected group
+
+// if multiple same-color groups found, add unique adjacent points to selected group
+
+// delete superfluous groups
+
+// remove new point from selected group
+
+// for each opponent color group, mark new point as non liberty
+
+// create and return new point with the selected group
+// }
