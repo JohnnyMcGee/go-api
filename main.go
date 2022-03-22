@@ -29,10 +29,27 @@ type move struct {
 
 var moves = []move{}
 
-var nodes = [][]string{
-	[]string{"", "", ""},
-	[]string{"", "", ""},
-	[]string{"", "", ""},
+// var groups = map[uint]map[uint]bool{}
+
+// type node struct {
+// 	Color string `json:"color"`
+// 	Group uint   `json:"group"`
+// }
+
+var nodes [][]string = generateBoard(boardSize)
+
+const boardSize = 9
+
+func generateBoard(size int) [][]string {
+	var board = [][]string{}
+	for y := 0; y < size; y++ {
+		col := []string{}
+		for x := 0; x < size; x++ {
+			col = append(col, "")
+		}
+		board = append(board, col)
+	}
+	return board
 }
 
 func getNodes(c *gin.Context) {
@@ -58,6 +75,13 @@ func postMove(c *gin.Context) {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 		return
 	}
+
+	// boundary := [4][2]int{
+	// 	[2]int{newMove.Y + 1, newMove.X},
+	// 	[2]int{newMove.Y, newMove.X + 1},
+	// 	[2]int{newMove.Y - 1, newMove.X},
+	// 	[2]int{newMove.Y, newMove.X - 1},
+	// }
 
 	nodes[newMove.Y][newMove.X] = newMove.Color
 	newMove.ID = len(moves)
