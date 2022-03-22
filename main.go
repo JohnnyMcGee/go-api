@@ -4,11 +4,16 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/gin-contrib/cors"
 )
 
 func main() {
 
 	router := gin.Default()
+	config := cors.DefaultConfig()
+	config.AllowOrigins = []string{"http://localhost:3000"}
+	router.Use(cors.New(config))
 	router.GET("/nodes", getNodes)
 	router.GET("/moves", getMoves)
 	router.POST("/moves", postMove)
@@ -48,13 +53,13 @@ func postMove(c *gin.Context) {
 
 	outOfRangeXY := newMove.X > 2 || newMove.X < 0 || newMove.Y > 2 || newMove.Y < 0
 	invalidColor := newMove.Color != "white" && newMove.Color != "black"
-	nodeUnavailable := nodes[newMove.X][newMove.Y] != ""
+	nodeUnavailable := nodes[newMove.Y][newMove.X] != ""
 	if outOfRangeXY || invalidColor || nodeUnavailable {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 		return
 	}
 
-	nodes[newMove.X][newMove.Y] = newMove.Color
+	nodes[newMove.Y][newMove.X] = newMove.Color
 	newMove.ID = len(moves)
 	moves = append(moves, newMove)
 	c.IndentedJSON(http.StatusCreated, newMove)
