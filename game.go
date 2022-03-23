@@ -70,14 +70,13 @@ func (b *gameBoard) addPoint(p point) {
 
 	// check if any eyes exist in pointGroup (single free point enclosed on all sides)
 
-	for _, bound := range pointGroup.Bounds {
-		p := b.at(bound[0], bound[1])
-		if p.isAnEye(*b) {
-			p.calculateEyePermissions(*b)
+	for _, row := range b.points {
+		for _, p := range row {
+			if p.isAnEye(*b) {
+				p.calculateEyePermissions(*b)
+			}
 		}
-
 	}
-
 }
 
 func (b *gameBoard) doCaptures(friendlyColor string) map[string]int {
