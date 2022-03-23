@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+	newGame()
 	router := gin.Default()
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:3000"}
@@ -15,15 +16,26 @@ func main() {
 	router.GET("/board", getBoard)
 	router.GET("/groups", getGroups)
 	router.GET("/captures", getCaptures)
+	router.GET("/new-game", getNewGame)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
 
-var board = NewGameBoard(9)
+var board gameBoard
 
-var captures = map[string]int{
-	"black": 0,
-	"white": 0,
+var captures map[string]int
+
+func newGame() {
+	board = NewGameBoard(9)
+	captures = map[string]int{
+		"black": 0,
+		"white": 0,
+	}
+}
+
+func getNewGame(c *gin.Context) {
+	newGame()
+	c.JSON(http.StatusOK, "")
 }
 
 func getBoard(c *gin.Context) {
@@ -44,7 +56,7 @@ func getGroups(c *gin.Context) {
 }
 
 func getCaptures(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, board.groups)
+	c.IndentedJSON(http.StatusOK, captures)
 }
 
 type move struct {
@@ -66,7 +78,10 @@ func postMove(c *gin.Context) {
 		return
 	}
 	board.addPoint(newPoint)
-	board.doCaptures()
+	cap := board.doCaptures()
+	for clr, num := range cap {
+		captures[clr] += num
+	}
 
 	c.IndentedJSON(http.StatusCreated, newPoint)
 }

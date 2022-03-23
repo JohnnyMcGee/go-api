@@ -1,48 +1,12 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/rs/xid"
 )
 
 // TODO: make sure all struct fields are capitalized for consistency
-// func main() {
-// 	board.addPoint(point{X: 2, Y: 5, Color: "white"})
-// 	board.addPoint(point{X: 2, Y: 7, Color: "white"})
-// 	board.addPoint(point{X: 3, Y: 6, Color: "white"})
-// 	board.addPoint(point{X: 2, Y: 6, Color: "black"})
-
-// 	for _, row := range board.Points() {
-// 		fmt.Println(row)
-
-// 	}
-// 	fmt.Println()
-// 	fmt.Println()
-
-// 	// white captures black
-// 	board.addPoint(point{X: 1, Y: 6, Color: "white"})
-// 	capturedPoints := board.doCaptures()
-
-// 	for _, row := range board.Points() {
-// 		fmt.Println(row)
-// 	}
-
-// 	for _, g := range board.groups {
-// 		fmt.Println(*g, g.countLiberties(board))
-// 	}
-
-// 	fmt.Println(capturedPoints)
-
-// 	// TODO: implement group logic to capture
-
-// 	// for _, row := range board.Points() {
-// 	// 	fmt.Println(row)
-// 	// }
-
-// }
-
-// var board = NewGameBoard(boardSize)
-
-// const boardSize = 9
 
 func NewGameBoard(size int) gameBoard {
 	gbPoints := make([][]*point, size, size)
@@ -131,6 +95,9 @@ func (b *gameBoard) doCaptures() map[string]int {
 			}
 		}
 	}
+	for _, id := range captured {
+		delete(board.groups, id)
+	}
 	return capturedPoints
 }
 
@@ -154,13 +121,18 @@ func (g group) countLiberties(board gameBoard) int {
 
 func (g *group) addPoint(p point, board gameBoard) {
 	// add adjacent points to selected group, unless the point belongs to the group
+	fmt.Println(p.adjPoints(board))
 	for _, adjP := range p.adjPoints(board) {
+
 		bound := [2]int{adjP.X, adjP.Y}
+
 		if adjP.GroupId != g.ID {
 			g.Bounds = append(g.Bounds, bound)
 		}
 	}
 	g.removePointFromBounds(p)
+	g.removeDuplicateBounds()
+	fmt.Println(g.Bounds)
 }
 
 func (g *group) removePointFromBounds(p point) {
@@ -171,10 +143,31 @@ func (g *group) removePointFromBounds(p point) {
 	}
 }
 
-// for each additional group adjacent to point,
-// merge into point group:
+func (g *group) removeDuplicateBounds() {
+	// filter non-unique bounds
+	uniqueBounds := [][2]int{}
+
+	for _, bound := range g.Bounds {
+		isUnique := true
+		for _, uniqueBound := range uniqueBounds {
+			xMatch := uniqueBound[0] == bound[0]
+			yMatch := uniqueBound[1] == bound[1]
+			if xMatch && yMatch {
+				isUnique = false
+			}
+		}
+		if isUnique {
+			uniqueBounds = append(uniqueBounds, bound)
+		}
+	}
+
+	fmt.Println(uniqueBounds)
+	g.Bounds = uniqueBounds
+}
 
 func (g *group) connectGroup(newGroup group, board gameBoard, connection ...point) {
+
+	// copy the applicable bounds
 	for _, bound := range newGroup.Bounds {
 		if board.at(bound[0], bound[1]).GroupId != g.ID {
 			g.Bounds = append(g.Bounds, bound)
@@ -183,10 +176,20 @@ func (g *group) connectGroup(newGroup group, board gameBoard, connection ...poin
 	for _, connectPoint := range connection {
 		g.removePointFromBounds(connectPoint)
 	}
+
+	g.removeDuplicateBounds()
+
+	// update point GroupIds on board
+	for _, row := range board.points {
+		for _, p := range row {
+			if p.GroupId == newGroup.ID {
+				p.GroupId = g.ID
+			}
+		}
+	}
+	// clean up unneeded group
 	delete(board.groups, newGroup.ID)
 }
-
-// clean up the partial groups
 
 type point struct {
 	Color   string `json:"color"`
