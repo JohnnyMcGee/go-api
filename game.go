@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 
+	"golang.org/x/exp/slices"
+
 	"github.com/rs/xid"
 )
 
@@ -12,29 +14,68 @@ const boardSize = 9
 
 func main() {
 	p0 := point{X: 2, Y: 5, Color: "white"}
-	// p0 = placePoint(p0)
 	p0.assignGroup(groups)
+	groups[p0.Group].addPoint(p0)
 	board[p0.Y][p0.X] = p0
 
 	fmt.Println(p0.adjPoints())
 
 	p1 := point{X: 2, Y: 6, Color: "white"}
-	// p1 = placePoint(p1)
 	p1.assignGroup(groups)
+	groups[p1.Group].addPoint(p1)
 	board[p1.Y][p1.X] = p1
+
+	p2 := point{X: 1, Y: 5, Color: "black"}
+	p2.assignGroup(groups)
+	groups[p2.Group].addPoint(p2)
+	board[p2.Y][p2.X] = p2
+
+	// TODO: implement group logic to add point, calculate bounds, count liberties, merge adjacent groups, and capture
 
 	fmt.Println(p1.adjPoints())
 	fmt.Println(p0.adjPoints())
-	fmt.Println(groups)
+	for _, g := range groups {
+		fmt.Println(*g, g.countLiberties(board))
+	}
+
+	printBoard(board)
 
 }
 
-var groups = map[string]group{}
+var groups = map[string]*group{}
 
 type group struct {
 	ID     string
 	Color  string
-	Bounds []point
+	Bounds [][2]int
+}
+
+// a "liberty" is an empty point adjacent to the group
+func (g group) countLiberties(gameBoard [][]point) int {
+	numOfLiberties := 0
+	for _, b := range g.Bounds {
+		p := gameBoard[b[1]][b[0]]
+		if p.Color == "" {
+			numOfLiberties++
+		}
+	}
+	return numOfLiberties
+}
+
+func (g *group) addPoint(p point) {
+	// add adjacent points to selected group, unless the point belongs to the group
+	for _, adjP := range p.adjPoints() {
+		bound := [2]int{adjP.X, adjP.Y}
+		if adjP.Group != g.ID {
+			g.Bounds = append(g.Bounds, bound)
+		}
+	}
+	// remove new point from selected group
+	pMatchesXY := func(b [2]int) bool { return b[0] == p.X && b[1] == p.Y }
+
+	if i := slices.IndexFunc[[2]int](g.Bounds, pMatchesXY); i > -1 {
+		g.Bounds = append(g.Bounds[:i], g.Bounds[i+1:]...)
+	}
 }
 
 type point struct {
@@ -65,7 +106,7 @@ func (p point) adjPoints() []point {
 	return adjPoints
 }
 
-func (p *point) assignGroup(groupMap map[string]group) {
+func (p *point) assignGroup(groupMap map[string]*group) {
 	for _, adjPoint := range p.adjPoints() {
 		if adjPoint.Color == p.Color {
 			p.Group = adjPoint.Group
@@ -73,11 +114,12 @@ func (p *point) assignGroup(groupMap map[string]group) {
 		}
 	}
 	p.Group = xid.New().String()
-	groupMap[p.Group] = group{
+	g := group{
 		ID:     p.Group,
-		Bounds: []point{},
+		Bounds: [][2]int{},
 		Color:  p.Color,
 	}
+	groupMap[p.Group] = &g
 }
 
 func generateBoard(size int) [][]point {
