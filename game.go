@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/rs/xid"
 )
 
@@ -13,7 +11,7 @@ func NewGameBoard(size int) gameBoard {
 	for y := 0; y < size; y++ {
 		col := make([]*point, size, size)
 		for x := 0; x < size; x++ {
-			p := point{Color: "", GroupId: "", X: x, Y: y, Permit: map[string]bool{"black": true, "white": false}}
+			p := point{Color: "", GroupId: "", X: x, Y: y, Permit: map[string]bool{"black": true, "white": true}}
 			col[x] = &p
 		}
 		gbPoints[y] = col
@@ -53,8 +51,8 @@ func (b gameBoard) Points() [][]point {
 func (b *gameBoard) addPoint(p point) {
 	// bind point to group (create new group if needed)
 	p.assignGroup(*b)
-	group := b.groups[p.GroupId]
-	group.addPoint(p, *b)
+	pointGroup := b.groups[p.GroupId]
+	pointGroup.addPoint(p, *b)
 	// merge any overlapping groups into one
 	pointsByGroup := map[string][]point{}
 	for _, adjPoint := range p.adjPoints(*b) {
@@ -65,10 +63,21 @@ func (b *gameBoard) addPoint(p point) {
 	for groupId, points := range pointsByGroup {
 		adjGroup := b.groups[groupId]
 		points = append(points, p)
-		group.connectGroup(*adjGroup, *b, points...)
+		pointGroup.connectGroup(*adjGroup, *b, points...)
 	}
 	// add point to board
 	*b.at(p.X, p.Y) = p
+
+	// check if any eyes exist in pointGroup (single free point enclosed on all sides)
+
+	for _, bound := range pointGroup.Bounds {
+		p := b.at(bound[0], bound[1])
+		if p.isAnEye(*b) {
+			p.calculateEyePermissions(*b)
+		}
+
+	}
+
 }
 
 func (b *gameBoard) doCaptures(friendlyColor string) map[string]int {
@@ -97,6 +106,10 @@ func (b *gameBoard) doCaptures(friendlyColor string) map[string]int {
 					if id == p.GroupId {
 						capturedPoints++
 						p.Color, p.GroupId = "", ""
+						p.Permit = map[string]bool{
+							"black": true,
+							"white": true,
+						}
 						break
 					}
 				}
@@ -138,7 +151,6 @@ func (g group) countLiberties(board gameBoard) int {
 
 func (g *group) addPoint(p point, board gameBoard) {
 	// add adjacent points to selected group, unless the point belongs to the group
-	fmt.Println(p.adjPoints(board))
 	for _, adjP := range p.adjPoints(board) {
 
 		bound := [2]int{adjP.X, adjP.Y}
@@ -149,7 +161,6 @@ func (g *group) addPoint(p point, board gameBoard) {
 	}
 	g.removePointFromBounds(p)
 	g.removeDuplicateBounds()
-	fmt.Println(g.Bounds)
 }
 
 func (g *group) removePointFromBounds(p point) {
@@ -178,7 +189,6 @@ func (g *group) removeDuplicateBounds() {
 		}
 	}
 
-	fmt.Println(uniqueBounds)
 	g.Bounds = uniqueBounds
 }
 
@@ -251,6 +261,60 @@ func (p *point) assignGroup(board gameBoard) {
 		Color:  p.Color,
 	}
 	board.groups[p.GroupId] = &g
+}
+
+func (p point) isAnEye(board gameBoard) bool {
+	isAnEye := true
+
+	for _, adjP := range p.adjPoints(board) {
+		if adjP.GroupId == "" {
+			isAnEye = false
+		}
+	}
+	return isAnEye
+}
+
+// assumes point is an eye (has no open point on any side)
+func (p *point) calculateEyePermissions(board gameBoard) {
+
+	adjGroups := map[string][]*group{
+		"black": {},
+		"white": {},
+	}
+
+	for _, adjP := range p.adjPoints(board) {
+		adjGroup := board.groups[adjP.GroupId]
+		adjGroups[adjGroup.Color] = append(adjGroups[adjGroup.Color], adjGroup)
+	}
+	// if point is an eye, determine its play permissions (play inside eye can be suicide)
+	anyWhiteSingleLiberty := false
+	anyWhiteMultiLiberty := false
+	for _, wGroup := range adjGroups["white"] {
+		liberties := wGroup.countLiberties(board)
+		if liberties == 1 {
+			anyWhiteSingleLiberty = true
+		}
+		if liberties > 1 {
+			anyWhiteMultiLiberty = true
+		}
+	}
+
+	anyBlackSingleLiberty := false
+	anyBlackMultiLiberty := false
+	for _, wGroup := range adjGroups["black"] {
+		liberties := wGroup.countLiberties(board)
+		if liberties == 1 {
+			anyBlackSingleLiberty = true
+		}
+		if liberties > 1 {
+			anyBlackMultiLiberty = true
+		}
+	}
+
+	whitePermitted := anyBlackSingleLiberty || anyWhiteMultiLiberty
+	blackPermitted := anyWhiteSingleLiberty || anyBlackMultiLiberty
+
+	p.Permit = map[string]bool{"white": whitePermitted, "black": blackPermitted}
 }
 
 func isValidMove(p point, board gameBoard) bool {
