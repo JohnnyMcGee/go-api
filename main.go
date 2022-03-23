@@ -38,13 +38,20 @@ func getNewGame(c *gin.Context) {
 	c.JSON(http.StatusOK, "")
 }
 
+// simplify gameboard before sending to client
 func getBoard(c *gin.Context) {
-	// remove all data not required by frontend application before sending
-	var simpleBoard [][]string
+	type simplePoint struct {
+		Color  string          `json:"color"`
+		Permit map[string]bool `json:"permit"`
+	}
+	simplify := func(p point) simplePoint {
+		return simplePoint{Color: p.Color, Permit: p.Permit}
+	}
+	var simpleBoard [][]simplePoint
 	for _, row := range board.Points() {
-		var simpleRow []string
+		var simpleRow []simplePoint
 		for _, point := range row {
-			simpleRow = append(simpleRow, point.Color)
+			simpleRow = append(simpleRow, simplify(point))
 		}
 		simpleBoard = append(simpleBoard, simpleRow)
 	}
@@ -78,7 +85,7 @@ func postMove(c *gin.Context) {
 		return
 	}
 	board.addPoint(newPoint)
-	cap := board.doCaptures()
+	cap := board.doCaptures(newPoint.Color)
 	for clr, num := range cap {
 		captures[clr] += num
 	}

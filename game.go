@@ -13,7 +13,7 @@ func NewGameBoard(size int) gameBoard {
 	for y := 0; y < size; y++ {
 		col := make([]*point, size, size)
 		for x := 0; x < size; x++ {
-			p := point{Color: "", GroupId: "", X: x, Y: y}
+			p := point{Color: "", GroupId: "", X: x, Y: y, Permit: map[string]bool{"black": true, "white": false}}
 			col[x] = &p
 		}
 		gbPoints[y] = col
@@ -71,33 +71,50 @@ func (b *gameBoard) addPoint(p point) {
 	*b.at(p.X, p.Y) = p
 }
 
-func (b *gameBoard) doCaptures() map[string]int {
-	captured := []string{}
-	for _, group := range b.groups {
-		if group.countLiberties(*b) < 1 {
-			captured = append(captured, group.ID)
+func (b *gameBoard) doCaptures(friendlyColor string) map[string]int {
+	var enemyColor string
+	if friendlyColor == "white" {
+		enemyColor = "black"
+	} else {
+		enemyColor = "white"
+	}
+
+	captureGroupsByColor := func(color string) []string {
+		captured := []string{}
+		for _, group := range b.groups {
+			if group.Color == color && group.countLiberties(*b) < 1 {
+				captured = append(captured, group.ID)
+			}
 		}
+		return captured
 	}
-	// reset points on the board belonging to those groups
-	// track the number of points captured
-	capturedPoints := map[string]int{
-		"black": 0,
-		"white": 0,
-	}
-	for _, col := range b.points {
-		for _, p := range col {
-			for _, id := range captured {
-				if id == p.GroupId {
-					capturedPoints[p.Color]++
-					p.Color, p.GroupId = "", ""
-					break
+
+	removeCapturedGroups := func(captured []string) int {
+		capturedPoints := 0
+		for _, col := range b.points {
+			for _, p := range col {
+				for _, id := range captured {
+					if id == p.GroupId {
+						capturedPoints++
+						p.Color, p.GroupId = "", ""
+						break
+					}
 				}
 			}
 		}
+		for _, id := range captured {
+			delete(board.groups, id)
+		}
+		return capturedPoints
 	}
-	for _, id := range captured {
-		delete(board.groups, id)
-	}
+	capturedPoints := make(map[string]int)
+	capturedEnemy := captureGroupsByColor(enemyColor)
+	capturedPoints[enemyColor] = removeCapturedGroups(capturedEnemy)
+
+	// capturing friendlies impossible unless suicide is enabled
+	capturedFriendly := captureGroupsByColor(friendlyColor)
+	capturedPoints[friendlyColor] = removeCapturedGroups(capturedFriendly)
+
 	return capturedPoints
 }
 
@@ -192,10 +209,11 @@ func (g *group) connectGroup(newGroup group, board gameBoard, connection ...poin
 }
 
 type point struct {
-	Color   string `json:"color"`
-	GroupId string `json:"group"`
-	X       int    `json:"x"`
-	Y       int    `json:"y"`
+	Color   string          `json:"color"`
+	GroupId string          `json:"group"`
+	X       int             `json:"x"`
+	Y       int             `json:"y"`
+	Permit  map[string]bool `json:"permit"`
 }
 
 func (p point) adjPoints(board gameBoard) []point {
