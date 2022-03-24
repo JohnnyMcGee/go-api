@@ -8,7 +8,6 @@ import (
 )
 
 func main() {
-	newGame()
 	router := gin.Default()
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:3000"}
@@ -16,25 +15,19 @@ func main() {
 	router.GET("/board", getBoard)
 	router.GET("/groups", getGroups)
 	router.GET("/captures", getCaptures)
+	router.GET("/score", getScore)
+	router.GET("/ko", getKo)
+	router.GET("/active-player", getActivePlayer)
+	router.GET("/game", getGame)
 	router.GET("/new-game", getNewGame)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
 
-var board gameBoard
-
-var captures map[string]int
-
-func newGame() {
-	board = NewGameBoard(9)
-	captures = map[string]int{
-		"black": 0,
-		"white": 0,
-	}
-}
+var Game = NewGame(9)
 
 func getNewGame(c *gin.Context) {
-	newGame()
+	Game = NewGame(9)
 	c.JSON(http.StatusOK, "")
 }
 
@@ -48,7 +41,7 @@ func getBoard(c *gin.Context) {
 		return simplePoint{Color: p.Color, Permit: p.Permit}
 	}
 	var simpleBoard [][]simplePoint
-	for _, row := range board.Points() {
+	for _, row := range Game.Board.Points() {
 		var simpleRow []simplePoint
 		for _, point := range row {
 			simpleRow = append(simpleRow, simplify(point))
@@ -59,17 +52,27 @@ func getBoard(c *gin.Context) {
 }
 
 func getGroups(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, board.groups)
+	c.IndentedJSON(http.StatusOK, Game.Board.groups)
 }
 
 func getCaptures(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, captures)
+	c.IndentedJSON(http.StatusOK, Game.Captures)
 }
 
-type move struct {
-	X     int    `json:"x"`
-	Y     int    `json:"y"`
-	Color string `json:"color"`
+func getScore(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, Game.Score)
+}
+
+func getKo(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, Game.Ko)
+}
+
+func getActivePlayer(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, Game.Turn)
+}
+
+func getGame(c *gin.Context) {
+	c.IndentedJSON(http.StatusOK, Game)
 }
 
 func postMove(c *gin.Context) {
@@ -80,15 +83,10 @@ func postMove(c *gin.Context) {
 		return
 	}
 
-	if !isValidMove(newPoint, board) {
+	if Game.isValidMove(newPoint) {
+		Game.play(newPoint)
+		c.IndentedJSON(http.StatusCreated, Game.Board.at(newPoint.X, newPoint.Y))
+	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
-		return
 	}
-	board.addPoint(newPoint)
-	cap := board.doCaptures(newPoint.Color)
-	for clr, num := range cap {
-		captures[clr] += num
-	}
-
-	c.IndentedJSON(http.StatusCreated, newPoint)
 }

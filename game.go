@@ -4,8 +4,8 @@ import (
 	"github.com/rs/xid"
 )
 
-// TODO: make sure all struct fields are capitalized for consistency
-
+// TODO: implement end of game and user settings (board size, scoring style, and?)
+// TODO: implement multiple concurrent games, multiple online players, AI single player mode
 func NewGameBoard(size int) gameBoard {
 	gbPoints := make([][]*point, size, size)
 	for y := 0; y < size; y++ {
@@ -49,6 +49,8 @@ func (b gameBoard) Points() [][]point {
 }
 
 func (b *gameBoard) addPoint(p point) {
+	// no point can be played twice (unless captured)
+	p.Permit = map[string]bool{"black": false, "white": false}
 	// bind point to group (create new group if needed)
 	p.assignGroup(*b)
 	pointGroup := b.groups[p.GroupId]
@@ -67,9 +69,10 @@ func (b *gameBoard) addPoint(p point) {
 	}
 	// add point to board
 	*b.at(p.X, p.Y) = p
+}
 
-	// check if any eyes exist in pointGroup (single free point enclosed on all sides)
-
+func (b *gameBoard) applyPermissions(ko [2]int) {
+	// check for eyes and apply permissions to prevent suicide
 	for _, row := range b.points {
 		for _, p := range row {
 			if p.isAnEye(*b) {
@@ -77,33 +80,32 @@ func (b *gameBoard) addPoint(p point) {
 			}
 		}
 	}
+	// apply ko rule
+	if ko[0] >= 0 {
+		b.at(ko[0], ko[1]).Permit = map[string]bool{"black": false, "white": false}
+	}
 }
 
-func (b *gameBoard) doCaptures(friendlyColor string) map[string]int {
-	var enemyColor string
-	if friendlyColor == "white" {
-		enemyColor = "black"
-	} else {
-		enemyColor = "white"
-	}
+func (b *gameBoard) doCaptures(friendlyColor string) (capturedPoints map[string][]point) {
+	enemyColor := oppositeColor(friendlyColor)
 
-	captureGroupsByColor := func(color string) []string {
-		captured := []string{}
+	captureGroupsByColor := func(color string) []*group {
+		captured := []*group{}
 		for _, group := range b.groups {
 			if group.Color == color && group.countLiberties(*b) < 1 {
-				captured = append(captured, group.ID)
+				captured = append(captured, group)
 			}
 		}
 		return captured
 	}
 
-	removeCapturedGroups := func(captured []string) int {
-		capturedPoints := 0
+	removeCapturedGroups := func(captured []*group) []point {
+		capturedPoints := []point{}
 		for _, col := range b.points {
 			for _, p := range col {
-				for _, id := range captured {
-					if id == p.GroupId {
-						capturedPoints++
+				for _, g := range captured {
+					if g.ID == p.GroupId {
+						capturedPoints = append(capturedPoints, *p)
 						p.Color, p.GroupId = "", ""
 						p.Permit = map[string]bool{
 							"black": true,
@@ -114,20 +116,148 @@ func (b *gameBoard) doCaptures(friendlyColor string) map[string]int {
 				}
 			}
 		}
-		for _, id := range captured {
-			delete(board.groups, id)
+		for _, g := range captured {
+			delete(b.groups, g.ID)
 		}
 		return capturedPoints
 	}
-	capturedPoints := make(map[string]int)
-	capturedEnemy := captureGroupsByColor(enemyColor)
-	capturedPoints[enemyColor] = removeCapturedGroups(capturedEnemy)
+	capturedGroups := make(map[string][]*group)
+	capturedPoints = make(map[string][]point)
+	capturedGroups[enemyColor] = captureGroupsByColor(enemyColor)
+	capturedPoints[enemyColor] = removeCapturedGroups(capturedGroups[enemyColor])
 
 	// capturing friendlies impossible unless suicide is enabled
-	capturedFriendly := captureGroupsByColor(friendlyColor)
-	capturedPoints[friendlyColor] = removeCapturedGroups(capturedFriendly)
+	capturedGroups[friendlyColor] = captureGroupsByColor(friendlyColor)
+	capturedPoints[friendlyColor] = removeCapturedGroups(capturedGroups[friendlyColor])
 
 	return capturedPoints
+}
+func (b *gameBoard) forEachPoint(f func(*point)) {
+	for _, row := range b.points {
+		for _, p := range row {
+			f(p)
+		}
+	}
+}
+
+func (b *gameBoard) Score() map[string]int {
+	score := map[string]int{"black": 0, "white": 0}
+	b.forEachPoint(func(p *point) {
+		if p.Color != "" {
+			score[p.Color]++
+		}
+	})
+	// count groups of enclosed free points
+	enclosures := b.getEnclosureTotals()
+	for color, total := range enclosures {
+		score[color] += total
+	}
+	return score
+}
+
+func (b *gameBoard) getEnclosureTotals() map[string]int {
+	enclosures := make(map[string]int)
+	enclosureColors := make(map[string]string)
+	boardBuffer := make([][]map[string]string, b.size(), b.size())
+	for i := 0; i < b.size(); i++ {
+		boardBuffer[i] = make([]map[string]string, b.size(), b.size())
+	}
+
+	// logic to determine which color owns an enclosure based on its neighboring points
+	compareColors := func(enclosureColor, neighborColor string) (newEnclosureColor string) {
+		if enclosureColor != neighborColor && neighborColor != "" {
+			if enclosureColor == "" {
+				return neighborColor
+			} else {
+				return "both"
+			}
+		}
+		return enclosureColor
+	}
+
+	// overwrite all buffer points of a given enclosure with a new value
+	updateEnclosure := func(enclosure string, newValue map[string]string) {
+		for y, row := range boardBuffer {
+			for x, b := range row {
+				if b["enclosure"] == enclosure {
+					boardBuffer[y][x] = newValue
+				}
+			}
+		}
+	}
+
+	b.forEachPoint(func(p *point) {
+		// look up values above and to the left of point
+		var up map[string]string
+		var left map[string]string
+		if p.Y > 0 {
+			up = boardBuffer[p.Y-1][p.X]
+		} else {
+			up = map[string]string{"enclosure": "none", "color": ""}
+		}
+		if p.X > 0 {
+			left = boardBuffer[p.Y][p.X-1]
+		} else {
+			left = map[string]string{"enclosure": "none", "color": ""}
+		}
+
+		buffer := make(map[string]string)
+		if p.Color == "" {
+			// determine the enclosure this buffer point belongs to
+			switch {
+			case up["enclosure"] != "none":
+				buffer = up
+			case left["enclosure"] != "none":
+				buffer = left
+			default:
+				buffer["enclosure"] = xid.New().String()
+				buffer["color"] = ""
+			}
+
+			// update color as necessary
+
+			buffer["color"] = compareColors(buffer["color"], up["color"])
+			buffer["color"] = compareColors(buffer["color"], left["color"])
+
+			// merge adjacent enclosures as necessary
+			if left["enclosure"] != buffer["enclosure"] && left["enclosure"] != "none" {
+				updateEnclosure(left["enclosure"], buffer)
+			}
+
+			// update enclosureColors map with findings
+			enclosureColors[buffer["enclosure"]] = buffer["color"]
+
+		} else {
+			buffer = map[string]string{"enclosure": "none", "color": p.Color}
+			// update the color of enclosures up and left
+			updateNeighborColor := func(neighbor map[string]string) {
+				if neighbor["enclosure"] != "none" {
+
+					newNeighborColor := compareColors(neighbor["color"], p.Color)
+					if neighbor["color"] != newNeighborColor {
+						updateEnclosure(
+							neighbor["enclosure"],
+							map[string]string{"enclosure": neighbor["enclosure"], "color": newNeighborColor},
+						)
+					}
+					enclosureColors[neighbor["enclosure"]] = newNeighborColor
+				}
+			}
+			updateNeighborColor(up)
+			updateNeighborColor(left)
+		}
+		boardBuffer[p.Y][p.X] = buffer
+	})
+
+	// add up points for each color
+	for _, row := range boardBuffer {
+		for _, b := range row {
+			if b["enclosure"] != "none" {
+				enclosures[b["color"]]++
+			}
+		}
+	}
+	return enclosures
 }
 
 type group struct {
@@ -146,6 +276,17 @@ func (g group) countLiberties(board gameBoard) int {
 		}
 	}
 	return numOfLiberties
+}
+
+// calculate number of stones (colored points) in a group
+func (g group) size(b gameBoard) int {
+	count := 0
+	b.forEachPoint(func(p *point) {
+		if p.GroupId == g.ID {
+			count++
+		}
+	})
+	return count
 }
 
 func (g *group) addPoint(p point, board gameBoard) {
@@ -206,13 +347,11 @@ func (g *group) connectGroup(newGroup group, board gameBoard, connection ...poin
 	g.removeDuplicateBounds()
 
 	// update point GroupIds on board
-	for _, row := range board.points {
-		for _, p := range row {
-			if p.GroupId == newGroup.ID {
-				p.GroupId = g.ID
-			}
+	board.forEachPoint(func(p *point) {
+		if p.GroupId == newGroup.ID {
+			p.GroupId = g.ID
 		}
-	}
+	})
 	// clean up unneeded group
 	delete(board.groups, newGroup.ID)
 }
@@ -316,9 +455,63 @@ func (p *point) calculateEyePermissions(board gameBoard) {
 	p.Permit = map[string]bool{"white": whitePermitted, "black": blackPermitted}
 }
 
-func isValidMove(p point, board gameBoard) bool {
-	inRangeXY := p.X < board.size() && p.X >= 0 && p.Y < board.size() && p.Y >= 0
-	validColor := p.Color == "white" || p.Color == "black"
-	pointIsOpen := board.at(p.X, p.Y).Color == ""
-	return inRangeXY && validColor && pointIsOpen
+func oppositeColor(color string) string {
+	if color == "white" {
+		return "black"
+	}
+	return "white"
+}
+
+type game struct {
+	Board    gameBoard      `json:"board"`
+	Captures map[string]int `json:"captures"`
+	Score    map[string]int `json:"score"`
+	Ko       [2]int         `json:"ko"`
+	Turn     string         `json:"turn"`
+}
+
+func NewGame(boardSize int) game {
+	return game{
+		Board:    NewGameBoard(boardSize),
+		Captures: map[string]int{"black": 0, "white": 0},
+		Score:    map[string]int{"black": 0, "white": 0},
+		Ko:       [2]int{-1, -1},
+		Turn:     "black",
+	}
+}
+
+func (g *game) isValidMove(p point) bool {
+	inRangeXY := p.X < g.Board.size() && p.X >= 0 && p.Y < g.Board.size() && p.Y >= 0
+	validColor := p.Color == g.Turn
+	playIsPermitted := g.Board.at(p.X, p.Y).Permit[p.Color]
+	return inRangeXY && validColor && playIsPermitted
+}
+
+func (g *game) play(p point) (score map[string]int) {
+	board := &g.Board
+	board.addPoint(p)
+	capturedPoints := board.doCaptures(p.Color)
+	for clr, points := range capturedPoints {
+		(g.Captures)[clr] += len(points)
+	}
+	// apply the rule of ko:
+	// A move may not revert the board back to its previous state
+	singlePointCaptured := len(capturedPoints["white"])+len(capturedPoints["black"]) == 1
+	newGroup := board.groups[board.at(p.X, p.Y).GroupId]
+	newPointInDanger := newGroup.size(*board) == 1 && newGroup.countLiberties(*board) == 1
+
+	if singlePointCaptured && newPointInDanger {
+		koPoint := capturedPoints[oppositeColor(p.Color)][0]
+		g.Ko = [2]int{koPoint.X, koPoint.Y}
+	} else {
+		g.Ko = [2]int{-1, -1}
+	}
+
+	board.applyPermissions(g.Ko)
+
+	g.Turn = oppositeColor(p.Color)
+
+	g.Score = board.Score()
+
+	return g.Score
 }
