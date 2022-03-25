@@ -102,34 +102,29 @@ func (b *gameBoard) doCaptures(friendlyColor string) (capturedPoints map[string]
 
 	removeCapturedGroups := func(captured []*group) []point {
 		capturedPoints := []point{}
-		for _, col := range b.points {
-			for _, p := range col {
-				for _, g := range captured {
-					if g.ID == p.GroupId {
-						capturedPoints = append(capturedPoints, *p)
-						p.Color, p.GroupId = "", ""
-						p.Permit = map[string]bool{
-							"black": true,
-							"white": true,
-						}
-						break
-					}
-				}
-			}
-		}
 		for _, g := range captured {
+			for _, p := range g.Points {
+				p.Color = ""
+				p.GroupId = ""
+				p.Permit = map[string]bool{"black": true, "white": true}
+				capturedPoints = append(capturedPoints, *p)
+			}
 			delete(b.groups, g.ID)
 		}
 		return capturedPoints
 	}
 	capturedGroups := make(map[string][]*group)
-	capturedPoints = make(map[string][]point)
+	capturedPoints = map[string][]point{"black": {}, "white": {}}
 	capturedGroups[enemyColor] = captureGroupsByColor(enemyColor)
-	capturedPoints[enemyColor] = removeCapturedGroups(capturedGroups[enemyColor])
+	if len(capturedGroups[enemyColor]) >= 1 {
+		capturedPoints[enemyColor] = removeCapturedGroups(capturedGroups[enemyColor])
+	}
 
 	// capturing friendlies impossible unless suicide is enabled
 	capturedGroups[friendlyColor] = captureGroupsByColor(friendlyColor)
-	capturedPoints[friendlyColor] = removeCapturedGroups(capturedGroups[friendlyColor])
+	if len(capturedGroups[friendlyColor]) >= 1 {
+		capturedPoints[friendlyColor] = removeCapturedGroups(capturedGroups[friendlyColor])
+	}
 
 	return capturedPoints
 }
@@ -265,7 +260,7 @@ type group struct {
 	ID     string   `json:"id"`
 	Color  string   `json:"color"`
 	Bounds [][2]int `json:"bounds"`
-	Points []point  `json:"points"`
+	Points []*point `json:"points"`
 }
 
 // a "liberty" is an empty point adjacent to the group
@@ -286,7 +281,7 @@ func (g group) size(b gameBoard) int {
 }
 
 func (g *group) addPoint(p point, board gameBoard) {
-	g.Points = append(g.Points, p)
+	g.Points = append(g.Points, &p)
 	// add adjacent points to selected group, unless the point belongs to the group
 	for _, adjP := range p.adjPoints(board) {
 
@@ -299,8 +294,6 @@ func (g *group) addPoint(p point, board gameBoard) {
 	if g.size(board) > 1 {
 		g.recalculateBounds(p)
 	}
-	// g.removePointFromBounds(p)
-	// g.removeDuplicateBounds()
 }
 
 func (g *group) recalculateBounds(removePoints ...point) {
@@ -334,11 +327,6 @@ func (g *group) connectGroup(newGroup group, board gameBoard, connection ...poin
 		}
 	}
 	g.recalculateBounds(connection...)
-	// for _, connectPoint := range connection {
-	// 	g.removePointFromBounds(connectPoint)
-	// }
-
-	// g.removeDuplicateBounds()
 
 	// update point GroupIds on board
 	board.forEachPoint(func(p *point) {
