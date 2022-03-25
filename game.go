@@ -5,7 +5,6 @@ import (
 )
 
 // TODO: implement end of game and user settings (board size, scoring style, and?)
-// TODO: optimize speed of moves/scoring using concurrency (and improved algorithms for less iteration?)
 // TODO: implement multiple concurrent games, multiple online players, AI single player mode
 func NewGameBoard(size int) gameBoard {
 	gbPoints := make([][]*point, size, size)
@@ -105,6 +104,7 @@ func (b *gameBoard) doCaptures(friendlyColor string) (capturedPoints map[string]
 				b.at(p.X, p.Y).Color = ""
 				b.at(p.X, p.Y).GroupId = ""
 				b.at(p.X, p.Y).Permit = map[string]bool{"black": true, "white": true}
+				b.at(p.X, p.Y).Territory = ""
 				capturedPoints = append(capturedPoints, *p)
 			}
 			delete(b.groups, g.ID)
@@ -126,6 +126,7 @@ func (b *gameBoard) doCaptures(friendlyColor string) (capturedPoints map[string]
 
 	return capturedPoints
 }
+
 func (b *gameBoard) forEachPoint(f func(*point)) {
 	for _, row := range b.points {
 		for _, p := range row {
@@ -140,105 +141,80 @@ func (b *gameBoard) Score() map[string]int {
 
 	territories := make(map[string]*group)
 
-	boardBuffer := make([][]map[string]string, b.size(), b.size())
-	for i := 0; i < b.size(); i++ {
-		boardBuffer[i] = make([]map[string]string, b.size(), b.size())
-	}
-
-	// logic to determine which color owns an territory based on its neighboring points
-	compareColors := func(territoryColor, neighborColor string) (newterritoryColor string) {
-		if territoryColor != neighborColor && neighborColor != "" {
-			if territoryColor == "" {
-				return neighborColor
-			} else {
-				return "both"
-			}
-		}
-		return territoryColor
-	}
-
-	// overwrite all bufferPoint points of a given territory with a new value
-	updateterritory := func(territory string, newValue map[string]string) {
-		e := territories[territory]
-		for _, p := range e.Points {
-			boardBuffer[p.Y][p.X] = newValue
-		}
-		e.Color = newValue["tColor"]
-	}
-
 	b.forEachPoint(func(p *point) {
 		// check territory above and to the left of point
-		var up map[string]string
-		var left map[string]string
+		up := "none"
+		left := "none"
 		if p.Y > 0 {
-			up = boardBuffer[p.Y-1][p.X]
-		} else {
-			up = map[string]string{"tId": "none", "tColor": ""}
+			up = b.at(p.X, p.Y-1).Territory
 		}
 		if p.X > 0 {
-			left = boardBuffer[p.Y][p.X-1]
-		} else {
-			left = map[string]string{"tId": "none", "tColor": ""}
+			left = b.at(p.X-1, p.Y).Territory
 		}
 
-		// determine the territory this bufferPoint point belongs to
-		bufferPoint := make(map[string]string)
-		if p.Color == "" {
+		// up & left are either a territory id, "none", or ""
+		compareColors := func(tColor, color string) string {
 			switch {
-			case up["tId"] != "none":
-				bufferPoint = up
-				e := territories[up["tId"]]
-				e.Points = append(e.Points, p)
-			case left["tId"] != "none":
-				bufferPoint = left
-				e := territories[left["tId"]]
-				e.Points = append(e.Points, p)
+			case tColor == "":
+				return color
+			case tColor != color:
+				return "both"
 			default:
-				bufferPoint["tId"] = xid.New().String()
-				bufferPoint["tColor"] = ""
-				territories[bufferPoint["tId"]] = &group{
-					ID:     bufferPoint["tId"],
-					Color:  bufferPoint["tColor"],
+				return tColor
+			}
+		}
+		if pIsTerritory := p.Color == ""; pIsTerritory {
+			// determine which territory this point belongs to
+			if _, upIsTerritory := territories[up]; upIsTerritory {
+				p.Territory = up
+				(territories[up].Points) = append(territories[up].Points, p)
+			} else if _, leftIsTerritory := territories[left]; leftIsTerritory {
+				p.Territory = left
+				(territories[left].Points) = append(territories[left].Points, p)
+			} else {
+				p.Territory = xid.New().String()
+				territories[p.Territory] = &group{
+					ID:     p.Territory,
+					Color:  "",
 					Points: []*point{p},
 				}
 			}
-			bufferPoint["tColor"] = compareColors(bufferPoint["tColor"], up["tColor"])
-			bufferPoint["tColor"] = compareColors(bufferPoint["tColor"], left["tColor"])
+			t := territories[p.Territory]
 
-			// merge adjacent territories as necessary
-			if left["tId"] != bufferPoint["tId"] && left["tId"] != "none" {
-				updateterritory(left["tId"], bufferPoint)
-				territories[bufferPoint["tId"]].Points = append(territories[bufferPoint["tId"]].Points, territories[left["tId"]].Points...)
-				delete(territories, left["tId"])
+			// confirm what color surrounds the territory
+			if upHasColor := up == ""; upHasColor {
+				t.Color = compareColors(t.Color, b.at(p.X, p.Y-1).Color)
+			}
+			if leftHasColor := left == ""; leftHasColor {
+				t.Color = compareColors(t.Color, b.at(p.X-1, p.Y).Color)
 			}
 
-			// update territories map with findings
-			updateterritory(bufferPoint["tId"], bufferPoint)
-
-		} else {
-			score[p.Color]++
-			bufferPoint = map[string]string{"tId": "none", "tColor": p.Color}
-			// update the color of territories up and left
-			updateNeighborColor := func(neighbor map[string]string) {
-				if neighbor["tId"] != "none" {
-
-					newNeighborColor := compareColors(neighbor["tColor"], p.Color)
-					if neighbor["tColor"] != newNeighborColor {
-						updateterritory(
-							neighbor["tId"],
-							map[string]string{"tId": neighbor["tId"], "tColor": newNeighborColor},
-						)
-					}
+			// merge adjacent territory if necessary
+			if leftIsTerritory := left != "" && left != "none" && left != t.ID; leftIsTerritory {
+				leftTerritory := territories[left]
+				t.Points = append(t.Points, leftTerritory.Points...)
+				for _, p := range leftTerritory.Points {
+					b.at(p.X, p.Y).Territory = t.ID
 				}
+				delete(territories, left)
 			}
-			updateNeighborColor(up)
-			updateNeighborColor(left)
+		} else { // point is occupied by a color
+			score[p.Color]++
+			if t, upIsTerritory := territories[up]; upIsTerritory {
+				t.Color = compareColors(t.Color, p.Color)
+			}
+			if t, leftIsTerritory := territories[left]; leftIsTerritory {
+				t.Color = compareColors(t.Color, p.Color)
+			}
 		}
-		boardBuffer[p.Y][p.X] = bufferPoint
 	})
 
-	for _, e := range territories {
-		score[e.Color] += len(e.Points)
+	for _, t := range territories {
+		score[t.Color] += len(t.Points)
+		// provide more useful information about territory
+		for _, p := range t.Points {
+			b.at(p.X, p.Y).Territory = t.Color
+		}
 	}
 
 	return score
