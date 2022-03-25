@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -84,7 +86,10 @@ func postMove(c *gin.Context) {
 	}
 
 	if Game.isValidMove(newPoint) {
+		start := time.Now()
 		Game.play(newPoint)
+		end := time.Now()
+		fmt.Printf("Move executed in %v\n", end.Sub(start))
 		c.IndentedJSON(http.StatusCreated, Game.Board.at(newPoint.X, newPoint.Y))
 	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
