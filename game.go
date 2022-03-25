@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/rs/xid"
 )
 
@@ -140,135 +138,109 @@ func (b *gameBoard) Score() map[string]int {
 	score := map[string]int{"black": 0, "white": 0}
 	// count groups of enclosed free points
 
-	enclosureScoreByColor := make(map[string]int)
-	enclosures := make(map[string]*group)
+	territories := make(map[string]*group)
+
 	boardBuffer := make([][]map[string]string, b.size(), b.size())
 	for i := 0; i < b.size(); i++ {
 		boardBuffer[i] = make([]map[string]string, b.size(), b.size())
 	}
 
-	// logic to determine which color owns an enclosure based on its neighboring points
-	compareColors := func(enclosureColor, neighborColor string) (newEnclosureColor string) {
-		if enclosureColor != neighborColor && neighborColor != "" {
-			if enclosureColor == "" {
+	// logic to determine which color owns an territory based on its neighboring points
+	compareColors := func(territoryColor, neighborColor string) (newterritoryColor string) {
+		if territoryColor != neighborColor && neighborColor != "" {
+			if territoryColor == "" {
 				return neighborColor
 			} else {
 				return "both"
 			}
 		}
-		return enclosureColor
+		return territoryColor
 	}
 
-	// overwrite all buffer points of a given enclosure with a new value
-	updateEnclosure := func(enclosure string, newValue map[string]string) {
-		e := enclosures[enclosure]
+	// overwrite all bufferPoint points of a given territory with a new value
+	updateterritory := func(territory string, newValue map[string]string) {
+		e := territories[territory]
 		for _, p := range e.Points {
 			boardBuffer[p.Y][p.X] = newValue
 		}
-		e.Color = newValue["color"]
-		// for y, row := range boardBuffer {
-		// 	for x, b := range row {
-		// 		if b["enclosure"] == enclosure {
-		// 			boardBuffer[y][x] = newValue
-		// 		}
-		// 	}
-		// }
+		e.Color = newValue["tColor"]
 	}
 
 	b.forEachPoint(func(p *point) {
-		// look up values above and to the left of point
+		// check territory above and to the left of point
 		var up map[string]string
 		var left map[string]string
 		if p.Y > 0 {
 			up = boardBuffer[p.Y-1][p.X]
 		} else {
-			up = map[string]string{"enclosure": "none", "color": ""}
+			up = map[string]string{"tId": "none", "tColor": ""}
 		}
 		if p.X > 0 {
 			left = boardBuffer[p.Y][p.X-1]
 		} else {
-			left = map[string]string{"enclosure": "none", "color": ""}
+			left = map[string]string{"tId": "none", "tColor": ""}
 		}
 
-		buffer := make(map[string]string)
+		// determine the territory this bufferPoint point belongs to
+		bufferPoint := make(map[string]string)
 		if p.Color == "" {
-			// determine the enclosure this buffer point belongs to
 			switch {
-			case up["enclosure"] != "none":
-				buffer = up
-				e := enclosures[up["enclosure"]]
+			case up["tId"] != "none":
+				bufferPoint = up
+				e := territories[up["tId"]]
 				e.Points = append(e.Points, p)
-			case left["enclosure"] != "none":
-				buffer = left
-				e := enclosures[left["enclosure"]]
+			case left["tId"] != "none":
+				bufferPoint = left
+				e := territories[left["tId"]]
 				e.Points = append(e.Points, p)
 			default:
-				buffer["enclosure"] = xid.New().String()
-				buffer["color"] = ""
-				enclosures[buffer["enclosure"]] = &group{
-					ID:     buffer["enclosure"],
-					Color:  buffer["color"],
+				bufferPoint["tId"] = xid.New().String()
+				bufferPoint["tColor"] = ""
+				territories[bufferPoint["tId"]] = &group{
+					ID:     bufferPoint["tId"],
+					Color:  bufferPoint["tColor"],
 					Points: []*point{p},
 				}
 			}
+			bufferPoint["tColor"] = compareColors(bufferPoint["tColor"], up["tColor"])
+			bufferPoint["tColor"] = compareColors(bufferPoint["tColor"], left["tColor"])
 
-			// update color as necessary
-
-			buffer["color"] = compareColors(buffer["color"], up["color"])
-			buffer["color"] = compareColors(buffer["color"], left["color"])
-
-			// merge adjacent enclosures as necessary
-			if left["enclosure"] != buffer["enclosure"] && left["enclosure"] != "none" {
-				updateEnclosure(left["enclosure"], buffer)
-				enclosures[buffer["enclosure"]].Points = append(enclosures[buffer["enclosure"]].Points, enclosures[left["enclosure"]].Points...)
-				delete(enclosures, left["enclosure"])
+			// merge adjacent territories as necessary
+			if left["tId"] != bufferPoint["tId"] && left["tId"] != "none" {
+				updateterritory(left["tId"], bufferPoint)
+				territories[bufferPoint["tId"]].Points = append(territories[bufferPoint["tId"]].Points, territories[left["tId"]].Points...)
+				delete(territories, left["tId"])
 			}
 
-			// update enclosures map with findings
-			updateEnclosure(buffer["enclosure"], buffer)
+			// update territories map with findings
+			updateterritory(bufferPoint["tId"], bufferPoint)
 
 		} else {
 			score[p.Color]++
-			buffer = map[string]string{"enclosure": "none", "color": p.Color}
-			// update the color of enclosures up and left
+			bufferPoint = map[string]string{"tId": "none", "tColor": p.Color}
+			// update the color of territories up and left
 			updateNeighborColor := func(neighbor map[string]string) {
-				if neighbor["enclosure"] != "none" {
+				if neighbor["tId"] != "none" {
 
-					newNeighborColor := compareColors(neighbor["color"], p.Color)
-					if neighbor["color"] != newNeighborColor {
-						updateEnclosure(
-							neighbor["enclosure"],
-							map[string]string{"enclosure": neighbor["enclosure"], "color": newNeighborColor},
+					newNeighborColor := compareColors(neighbor["tColor"], p.Color)
+					if neighbor["tColor"] != newNeighborColor {
+						updateterritory(
+							neighbor["tId"],
+							map[string]string{"tId": neighbor["tId"], "tColor": newNeighborColor},
 						)
 					}
-					// enclosures[neighbor["enclosure"]].Color = newNeighborColor
 				}
 			}
 			updateNeighborColor(up)
 			updateNeighborColor(left)
 		}
-		boardBuffer[p.Y][p.X] = buffer
+		boardBuffer[p.Y][p.X] = bufferPoint
 	})
 
-	// add up points for each color
-	// for _, row := range boardBuffer {
-	// 	for _, b := range row {
-	// 		if b["enclosure"] != "none" {
-	// 			enclosureScoreByColor[b["color"]]++
-	// 		}
-	// 	}
-	// }
-
-	for _, e := range enclosures {
-		enclosureScoreByColor[e.Color] += len(e.Points)
-		for i, p := range e.Points {
-			fmt.Printf("[%v] x:%v y:%v\n", i, p.X, p.Y)
-		}
+	for _, e := range territories {
+		score[e.Color] += len(e.Points)
 	}
 
-	for color, total := range enclosureScoreByColor {
-		score[color] += total
-	}
 	return score
 }
 
@@ -356,11 +328,12 @@ func (g *group) connectGroup(newGroup group, board gameBoard, connection ...poin
 }
 
 type point struct {
-	Color   string          `json:"color"`
-	GroupId string          `json:"group"`
-	X       int             `json:"x"`
-	Y       int             `json:"y"`
-	Permit  map[string]bool `json:"permit"`
+	Color     string          `json:"color"`
+	GroupId   string          `json:"group"`
+	X         int             `json:"x"`
+	Y         int             `json:"y"`
+	Permit    map[string]bool `json:"permit"`
+	Territory string          `json:"territory"`
 }
 
 func (p point) adjPoints(board gameBoard) []point {
