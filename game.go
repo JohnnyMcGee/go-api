@@ -5,6 +5,7 @@ import (
 )
 
 // TODO: implement end of game and user settings (board size, scoring style, and?)
+// TODO: optimize speed of moves/scoring using concurrency (and improved algorithms for less iteration?)
 // TODO: implement multiple concurrent games, multiple online players, AI single player mode
 func NewGameBoard(size int) gameBoard {
 	gbPoints := make([][]*point, size, size)
@@ -264,6 +265,7 @@ type group struct {
 	ID     string   `json:"id"`
 	Color  string   `json:"color"`
 	Bounds [][2]int `json:"bounds"`
+	Points []point  `json:"points"`
 }
 
 // a "liberty" is an empty point adjacent to the group
@@ -280,16 +282,11 @@ func (g group) countLiberties(board gameBoard) int {
 
 // calculate number of stones (colored points) in a group
 func (g group) size(b gameBoard) int {
-	count := 0
-	b.forEachPoint(func(p *point) {
-		if p.GroupId == g.ID {
-			count++
-		}
-	})
-	return count
+	return len(g.Points)
 }
 
 func (g *group) addPoint(p point, board gameBoard) {
+	g.Points = append(g.Points, p)
 	// add adjacent points to selected group, unless the point belongs to the group
 	for _, adjP := range p.adjPoints(board) {
 
@@ -299,36 +296,32 @@ func (g *group) addPoint(p point, board gameBoard) {
 			g.Bounds = append(g.Bounds, bound)
 		}
 	}
-	g.removePointFromBounds(p)
-	g.removeDuplicateBounds()
-}
-
-func (g *group) removePointFromBounds(p point) {
-	for i, bound := range g.Bounds {
-		if bound[0] == p.X && bound[1] == p.Y {
-			g.Bounds = append(g.Bounds[:i], g.Bounds[i+1:]...)
-		}
+	if g.size(board) > 1 {
+		g.recalculateBounds(p)
 	}
+	// g.removePointFromBounds(p)
+	// g.removeDuplicateBounds()
 }
 
-func (g *group) removeDuplicateBounds() {
-	// filter non-unique bounds
-	uniqueBounds := [][2]int{}
-
+func (g *group) recalculateBounds(removePoints ...point) {
+	previouslyEncountered := make(map[[2]int]bool)
+	uniqueBounds := make([][2]int, 0)
+OUTER:
 	for _, bound := range g.Bounds {
-		isUnique := true
-		for _, uniqueBound := range uniqueBounds {
-			xMatch := uniqueBound[0] == bound[0]
-			yMatch := uniqueBound[1] == bound[1]
-			if xMatch && yMatch {
-				isUnique = false
+		// remove bound if it contains a remove point
+		for _, p := range removePoints {
+			if bound[0] == p.X && bound[1] == p.Y {
+				// g.Bounds = append(g.Bounds[:i], g.Bounds[i+1:]...)
+				continue OUTER
 			}
 		}
-		if isUnique {
+
+		// filter bound if it is not unique
+		if _, ok := previouslyEncountered[bound]; !ok {
+			previouslyEncountered[bound] = ok
 			uniqueBounds = append(uniqueBounds, bound)
 		}
 	}
-
 	g.Bounds = uniqueBounds
 }
 
@@ -340,11 +333,12 @@ func (g *group) connectGroup(newGroup group, board gameBoard, connection ...poin
 			g.Bounds = append(g.Bounds, bound)
 		}
 	}
-	for _, connectPoint := range connection {
-		g.removePointFromBounds(connectPoint)
-	}
+	g.recalculateBounds(connection...)
+	// for _, connectPoint := range connection {
+	// 	g.removePointFromBounds(connectPoint)
+	// }
 
-	g.removeDuplicateBounds()
+	// g.removeDuplicateBounds()
 
 	// update point GroupIds on board
 	board.forEachPoint(func(p *point) {
