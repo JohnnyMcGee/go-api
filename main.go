@@ -36,11 +36,12 @@ func getNewGame(c *gin.Context) {
 // simplify gameboard before sending to client
 func getBoard(c *gin.Context) {
 	type simplePoint struct {
-		Color  string          `json:"color"`
-		Permit map[string]bool `json:"permit"`
+		Color     string          `json:"color"`
+		Permit    map[string]bool `json:"permit"`
+		Territory string          `json:"territory"`
 	}
 	simplify := func(p point) simplePoint {
-		return simplePoint{Color: p.Color, Permit: p.Permit}
+		return simplePoint{Color: p.Color, Permit: p.Permit, Territory: p.Territory}
 	}
 	var simpleBoard [][]simplePoint
 	for _, row := range Game.Board.Points() {
