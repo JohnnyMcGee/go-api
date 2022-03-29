@@ -35,23 +35,7 @@ func getNewGame(c *gin.Context) {
 
 // simplify gameboard before sending to client
 func getBoard(c *gin.Context) {
-	type simplePoint struct {
-		Color     string          `json:"color"`
-		Permit    map[string]bool `json:"permit"`
-		Territory string          `json:"territory"`
-	}
-	simplify := func(p point) simplePoint {
-		return simplePoint{Color: p.Color, Permit: p.Permit, Territory: p.Territory}
-	}
-	var simpleBoard [][]simplePoint
-	for _, row := range Game.Board.Points() {
-		var simpleRow []simplePoint
-		for _, point := range row {
-			simpleRow = append(simpleRow, simplify(point))
-		}
-		simpleBoard = append(simpleBoard, simpleRow)
-	}
-	c.IndentedJSON(http.StatusOK, simpleBoard)
+	c.IndentedJSON(http.StatusOK, simplifyBoard(Game.Board))
 }
 
 func getGroups(c *gin.Context) {
@@ -75,7 +59,7 @@ func getActivePlayer(c *gin.Context) {
 }
 
 func getGame(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, Game)
+	c.IndentedJSON(http.StatusOK, simplifyGame(Game))
 }
 
 func postMove(c *gin.Context) {
@@ -94,5 +78,43 @@ func postMove(c *gin.Context) {
 		c.IndentedJSON(http.StatusCreated, Game.Board.at(newPoint.X, newPoint.Y))
 	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
+	}
+}
+
+type simplePoint struct {
+	X         int             `json:"x"`
+	Y         int             `json:"y"`
+	Color     string          `json:"color"`
+	Permit    map[string]bool `json:"permit"`
+	Territory string          `json:"territory"`
+}
+
+func simplifyPoint(p point) simplePoint {
+	return simplePoint{X: p.X, Y: p.Y, Color: p.Color, Permit: p.Permit, Territory: p.Territory}
+}
+
+func simplifyBoard(b gameBoard) [][]simplePoint {
+	var simpleBoard [][]simplePoint
+	for _, row := range Game.Board.Points() {
+		var simpleRow []simplePoint
+		for _, point := range row {
+			simpleRow = append(simpleRow, simplifyPoint(point))
+		}
+		simpleBoard = append(simpleBoard, simpleRow)
+	}
+	return simpleBoard
+}
+
+type simpleGame struct {
+	Board [][]simplePoint `json:"board"`
+	Score map[string]int  `json:"score"`
+	Turn  string          `json:"turn"`
+}
+
+func simplifyGame(g game) simpleGame {
+	return simpleGame{
+		Board: simplifyBoard(g.Board),
+		Score: g.Score,
+		Turn:  g.Turn,
 	}
 }
