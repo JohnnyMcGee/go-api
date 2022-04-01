@@ -73,7 +73,7 @@ func (b *GameBoard) addPoint(p Point) {
 
 func (b *GameBoard) applyPermissions(ko [2]int) {
 	// check for eyes and apply permissions to prevent suicide
-	b.forEachPoint(func(p *Point) {
+	b.ForEachPoint(func(p *Point) {
 		if p.isAnEye(*b) {
 			p.Permit = p.calculateEyePermissions(*b)
 		}
@@ -127,7 +127,7 @@ func (b *GameBoard) doCaptures(friendlyColor string) (capturedPoints map[string]
 	return capturedPoints
 }
 
-func (b *GameBoard) forEachPoint(f func(*Point)) {
+func (b *GameBoard) ForEachPoint(f func(*Point)) {
 	for _, row := range b.points {
 		for _, p := range row {
 			f(p)
@@ -141,7 +141,7 @@ func (b *GameBoard) Score() map[string]int {
 
 	territories := make(map[string]*group)
 
-	b.forEachPoint(func(p *Point) {
+	b.ForEachPoint(func(p *Point) {
 		// check territory above and to the left of point
 		up := "none"
 		left := "none"
@@ -243,7 +243,7 @@ func (g group) countLiberties(board GameBoard) int {
 }
 
 // calculate number of stones (colored points) in a group
-func (g group) size(b GameBoard) int {
+func (g group) size() int {
 	return len(g.Points)
 }
 
@@ -258,7 +258,7 @@ func (g *group) addPoint(p Point, board GameBoard) {
 			g.Bounds = append(g.Bounds, bound)
 		}
 	}
-	if g.size(board) > 1 {
+	if g.size() > 1 {
 		g.recalculateBounds(p)
 	}
 }
@@ -441,8 +441,10 @@ func NewGame(boardSize int) Game {
 func (g *Game) IsValidMove(p Point) bool {
 	inRangeXY := p.X < g.Board.size() && p.X >= 0 && p.Y < g.Board.size() && p.Y >= 0
 	validColor := p.Color == g.Turn
-	playIsPermitted := g.Board.At(p.X, p.Y).Permit[p.Color]
-	return !g.Ended && inRangeXY && validColor && playIsPermitted
+	if !g.Ended && inRangeXY && validColor {
+		return g.Board.At(p.X, p.Y).Permit[p.Color]
+	}
+	return false
 }
 
 func (g *Game) Play(p Point) (score map[string]int) {
@@ -458,7 +460,7 @@ func (g *Game) Play(p Point) (score map[string]int) {
 	singlePointCaptured := len(capturedPoints["white"])+len(capturedPoints["black"]) == 1
 	if singlePointCaptured {
 		newGroup := board.Groups[board.At(p.X, p.Y).GroupId]
-		newPointInDanger := newGroup.size(*board) == 1 && newGroup.countLiberties(*board) == 1
+		newPointInDanger := newGroup.size() == 1 && newGroup.countLiberties(*board) == 1
 
 		if newPointInDanger {
 			koPoint := capturedPoints[oppositeColor(p.Color)][0]

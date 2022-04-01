@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"go-api/game"
+	"go-api/player"
 )
 
 func main() {
@@ -26,11 +27,19 @@ func main() {
 	router.GET("/new-game", getNewGame)
 	router.GET("/pass", getPass)
 	router.GET("/resign", getResign)
+	router.GET("/player-move/:color", getPlayerMove)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
 
 var Game = game.NewGame(9)
+
+func getPlayerMove(c *gin.Context) {
+	color := c.Param("color")
+	move := player.RandomMove(Game, color)
+	Game.Play(move)
+	c.JSON(http.StatusOK, move)
+}
 
 func getResign(c *gin.Context) {
 	Game.Resign(Game.Turn)
