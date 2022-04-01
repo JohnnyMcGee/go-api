@@ -7,6 +7,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+
+	"go-api/game"
 )
 
 func main() {
@@ -28,15 +30,15 @@ func main() {
 	router.Run("localhost:8080")
 }
 
-var Game = NewGame(9)
+var Game = game.NewGame(9)
 
 func getResign(c *gin.Context) {
-	Game.resign(Game.Turn)
+	Game.Resign(Game.Turn)
 	c.JSON(http.StatusOK, "Game Over")
 }
 
 func getPass(c *gin.Context) {
-	Game.pass()
+	Game.Pass()
 	if Game.Ended {
 		c.JSON(http.StatusOK, "Game Over")
 	} else {
@@ -45,7 +47,7 @@ func getPass(c *gin.Context) {
 }
 
 func getNewGame(c *gin.Context) {
-	Game = NewGame(9)
+	Game = game.NewGame(9)
 	c.JSON(http.StatusOK, "")
 }
 
@@ -55,7 +57,7 @@ func getBoard(c *gin.Context) {
 }
 
 func getGroups(c *gin.Context) {
-	c.IndentedJSON(http.StatusOK, Game.Board.groups)
+	c.IndentedJSON(http.StatusOK, Game.Board.Groups)
 }
 
 func getCaptures(c *gin.Context) {
@@ -79,19 +81,19 @@ func getGame(c *gin.Context) {
 }
 
 func postMove(c *gin.Context) {
-	var newPoint point
+	var newPoint game.Point
 
 	if err := c.BindJSON(&newPoint); err != nil {
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "invalid JSON data"})
 		return
 	}
 
-	if Game.isValidMove(newPoint) {
+	if Game.IsValidMove(newPoint) {
 		start := time.Now()
-		Game.play(newPoint)
+		Game.Play(newPoint)
 		end := time.Now()
 		fmt.Printf("Move executed in %v\n", end.Sub(start))
-		c.IndentedJSON(http.StatusCreated, Game.Board.at(newPoint.X, newPoint.Y))
+		c.IndentedJSON(http.StatusCreated, Game.Board.At(newPoint.X, newPoint.Y))
 	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 	}
@@ -105,11 +107,11 @@ type simplePoint struct {
 	Territory string          `json:"territory"`
 }
 
-func simplifyPoint(p point) simplePoint {
+func simplifyPoint(p game.Point) simplePoint {
 	return simplePoint{X: p.X, Y: p.Y, Color: p.Color, Permit: p.Permit, Territory: p.Territory}
 }
 
-func simplifyBoard(b gameBoard) [][]simplePoint {
+func simplifyBoard(b game.GameBoard) [][]simplePoint {
 	var simpleBoard [][]simplePoint
 	for _, row := range Game.Board.Points() {
 		var simpleRow []simplePoint
@@ -130,7 +132,7 @@ type simpleGame struct {
 	Winner string          `json:"winner"`
 }
 
-func simplifyGame(g game) simpleGame {
+func simplifyGame(g game.Game) simpleGame {
 	return simpleGame{
 		Board:  simplifyBoard(g.Board),
 		Score:  g.Score,

@@ -1,44 +1,44 @@
-package main
+package game
 
 import (
 	"github.com/rs/xid"
 )
 
-// TODO: implement end of game and user settings (board size, scoring style, and?)
+// TODO: implement user settings (board size, scoring style, and?)
 // TODO: implement multiple concurrent games, multiple online players, AI single player mode
-func NewGameBoard(size int) gameBoard {
-	gbPoints := make([][]*point, size, size)
+func NewGameBoard(size int) GameBoard {
+	gbPoints := make([][]*Point, size, size)
 	for y := 0; y < size; y++ {
-		col := make([]*point, size, size)
+		col := make([]*Point, size, size)
 		for x := 0; x < size; x++ {
-			p := point{Color: "", GroupId: "", X: x, Y: y, Permit: map[string]bool{"black": true, "white": true}}
+			p := Point{Color: "", GroupId: "", X: x, Y: y, Permit: map[string]bool{"black": true, "white": true}}
 			col[x] = &p
 		}
 		gbPoints[y] = col
 	}
-	return gameBoard{
+	return GameBoard{
 		points: gbPoints,
-		groups: map[string]*group{},
+		Groups: map[string]*group{},
 	}
 }
 
-type gameBoard struct {
-	points [][]*point
-	groups map[string]*group
+type GameBoard struct {
+	points [][]*Point
+	Groups map[string]*group
 }
 
-func (b gameBoard) at(x, y int) *point {
+func (b GameBoard) At(x, y int) *Point {
 	return b.points[y][x]
 }
 
-func (b gameBoard) size() int {
+func (b GameBoard) size() int {
 	return len(b.points)
 }
 
-func (b gameBoard) Points() [][]point {
-	boardPoints := make([][]point, len(b.points), len(b.points))
+func (b GameBoard) Points() [][]Point {
+	boardPoints := make([][]Point, len(b.points), len(b.points))
 	for j, col := range b.points {
-		pCol := make([]point, len(col), len(col))
+		pCol := make([]Point, len(col), len(col))
 		for i := range col {
 			p := col[i]
 			pCol[i] = *p
@@ -48,48 +48,48 @@ func (b gameBoard) Points() [][]point {
 	return boardPoints
 }
 
-func (b *gameBoard) addPoint(p point) {
+func (b *GameBoard) addPoint(p Point) {
 	// no point can be played twice (unless captured)
 	p.Permit = map[string]bool{"black": false, "white": false}
 	// bind point to group (create new group if needed)
 	p.assignGroup(*b)
-	pointGroup := b.groups[p.GroupId]
+	pointGroup := b.Groups[p.GroupId]
 	pointGroup.addPoint(p, *b)
 	// merge any overlapping groups into one
-	pointsByGroup := map[string][]point{}
+	pointsByGroup := map[string][]Point{}
 	for _, adjPoint := range p.adjPoints(*b) {
 		if adjPoint.Color == p.Color && adjPoint.GroupId != p.GroupId {
 			pointsByGroup[adjPoint.GroupId] = append(pointsByGroup[adjPoint.GroupId], adjPoint)
 		}
 	}
 	for groupId, points := range pointsByGroup {
-		adjGroup := b.groups[groupId]
+		adjGroup := b.Groups[groupId]
 		points = append(points, p)
 		pointGroup.connectGroup(*adjGroup, *b, points...)
 	}
 	// add point to board
-	*b.at(p.X, p.Y) = p
+	*b.At(p.X, p.Y) = p
 }
 
-func (b *gameBoard) applyPermissions(ko [2]int) {
+func (b *GameBoard) applyPermissions(ko [2]int) {
 	// check for eyes and apply permissions to prevent suicide
-	b.forEachPoint(func(p *point) {
+	b.forEachPoint(func(p *Point) {
 		if p.isAnEye(*b) {
 			p.Permit = p.calculateEyePermissions(*b)
 		}
 	})
 	// apply ko rule
 	if ko[0] >= 0 {
-		b.at(ko[0], ko[1]).Permit = map[string]bool{"black": false, "white": false}
+		b.At(ko[0], ko[1]).Permit = map[string]bool{"black": false, "white": false}
 	}
 }
 
-func (b *gameBoard) doCaptures(friendlyColor string) (capturedPoints map[string][]point) {
+func (b *GameBoard) doCaptures(friendlyColor string) (capturedPoints map[string][]Point) {
 	enemyColor := oppositeColor(friendlyColor)
 
 	captureGroupsByColor := func(color string) []*group {
 		captured := []*group{}
-		for _, group := range b.groups {
+		for _, group := range b.Groups {
 			if group.Color == color && group.countLiberties(*b) < 1 {
 				captured = append(captured, group)
 			}
@@ -97,22 +97,22 @@ func (b *gameBoard) doCaptures(friendlyColor string) (capturedPoints map[string]
 		return captured
 	}
 
-	removeCapturedGroups := func(captured []*group) []point {
-		capturedPoints := []point{}
+	removeCapturedGroups := func(captured []*group) []Point {
+		capturedPoints := []Point{}
 		for _, g := range captured {
 			for _, p := range g.Points {
-				b.at(p.X, p.Y).Color = ""
-				b.at(p.X, p.Y).GroupId = ""
-				b.at(p.X, p.Y).Permit = map[string]bool{"black": true, "white": true}
-				b.at(p.X, p.Y).Territory = ""
+				b.At(p.X, p.Y).Color = ""
+				b.At(p.X, p.Y).GroupId = ""
+				b.At(p.X, p.Y).Permit = map[string]bool{"black": true, "white": true}
+				b.At(p.X, p.Y).Territory = ""
 				capturedPoints = append(capturedPoints, *p)
 			}
-			delete(b.groups, g.ID)
+			delete(b.Groups, g.ID)
 		}
 		return capturedPoints
 	}
 	capturedGroups := make(map[string][]*group)
-	capturedPoints = map[string][]point{"black": {}, "white": {}}
+	capturedPoints = map[string][]Point{"black": {}, "white": {}}
 	capturedGroups[enemyColor] = captureGroupsByColor(enemyColor)
 	if len(capturedGroups[enemyColor]) >= 1 {
 		capturedPoints[enemyColor] = removeCapturedGroups(capturedGroups[enemyColor])
@@ -127,7 +127,7 @@ func (b *gameBoard) doCaptures(friendlyColor string) (capturedPoints map[string]
 	return capturedPoints
 }
 
-func (b *gameBoard) forEachPoint(f func(*point)) {
+func (b *GameBoard) forEachPoint(f func(*Point)) {
 	for _, row := range b.points {
 		for _, p := range row {
 			f(p)
@@ -135,21 +135,21 @@ func (b *gameBoard) forEachPoint(f func(*point)) {
 	}
 }
 
-func (b *gameBoard) Score() map[string]int {
+func (b *GameBoard) Score() map[string]int {
 	score := map[string]int{"black": 0, "white": 0}
 	// count groups of enclosed free points
 
 	territories := make(map[string]*group)
 
-	b.forEachPoint(func(p *point) {
+	b.forEachPoint(func(p *Point) {
 		// check territory above and to the left of point
 		up := "none"
 		left := "none"
 		if p.Y > 0 {
-			up = b.at(p.X, p.Y-1).Territory
+			up = b.At(p.X, p.Y-1).Territory
 		}
 		if p.X > 0 {
-			left = b.at(p.X-1, p.Y).Territory
+			left = b.At(p.X-1, p.Y).Territory
 		}
 
 		// up & left are either a territory id, "none", or ""
@@ -176,17 +176,17 @@ func (b *gameBoard) Score() map[string]int {
 				territories[p.Territory] = &group{
 					ID:     p.Territory,
 					Color:  "",
-					Points: []*point{p},
+					Points: []*Point{p},
 				}
 			}
 			t := territories[p.Territory]
 
 			// confirm what color surrounds the territory
 			if upHasColor := up == ""; upHasColor {
-				t.Color = compareColors(t.Color, b.at(p.X, p.Y-1).Color)
+				t.Color = compareColors(t.Color, b.At(p.X, p.Y-1).Color)
 			}
 			if leftHasColor := left == ""; leftHasColor {
-				t.Color = compareColors(t.Color, b.at(p.X-1, p.Y).Color)
+				t.Color = compareColors(t.Color, b.At(p.X-1, p.Y).Color)
 			}
 
 			// merge adjacent territory if necessary
@@ -197,7 +197,7 @@ func (b *gameBoard) Score() map[string]int {
 				}
 				t.Points = append(t.Points, leftTerritory.Points...)
 				for _, p := range leftTerritory.Points {
-					b.at(p.X, p.Y).Territory = t.ID
+					b.At(p.X, p.Y).Territory = t.ID
 				}
 				delete(territories, left)
 			}
@@ -216,7 +216,7 @@ func (b *gameBoard) Score() map[string]int {
 		score[t.Color] += len(t.Points)
 		// provide more useful information about territory
 		for _, p := range t.Points {
-			b.at(p.X, p.Y).Territory = t.Color
+			b.At(p.X, p.Y).Territory = t.Color
 		}
 	}
 
@@ -227,14 +227,14 @@ type group struct {
 	ID     string   `json:"id"`
 	Color  string   `json:"color"`
 	Bounds [][2]int `json:"bounds"`
-	Points []*point `json:"points"`
+	Points []*Point `json:"points"`
 }
 
 // a "liberty" is an empty point adjacent to the group
-func (g group) countLiberties(board gameBoard) int {
+func (g group) countLiberties(board GameBoard) int {
 	numOfLiberties := 0
 	for _, b := range g.Bounds {
-		p := board.at(b[0], b[1])
+		p := board.At(b[0], b[1])
 		if p.Color == "" {
 			numOfLiberties++
 		}
@@ -243,11 +243,11 @@ func (g group) countLiberties(board gameBoard) int {
 }
 
 // calculate number of stones (colored points) in a group
-func (g group) size(b gameBoard) int {
+func (g group) size(b GameBoard) int {
 	return len(g.Points)
 }
 
-func (g *group) addPoint(p point, board gameBoard) {
+func (g *group) addPoint(p Point, board GameBoard) {
 	g.Points = append(g.Points, &p)
 	// add adjacent points to selected group, unless the point belongs to the group
 	for _, adjP := range p.adjPoints(board) {
@@ -263,7 +263,7 @@ func (g *group) addPoint(p point, board gameBoard) {
 	}
 }
 
-func (g *group) recalculateBounds(removePoints ...point) {
+func (g *group) recalculateBounds(removePoints ...Point) {
 	previouslyEncountered := make(map[[2]int]bool)
 	uniqueBounds := make([][2]int, 0)
 OUTER:
@@ -285,11 +285,11 @@ OUTER:
 	g.Bounds = uniqueBounds
 }
 
-func (g *group) connectGroup(newGroup group, board gameBoard, connection ...point) {
+func (g *group) connectGroup(newGroup group, board GameBoard, connection ...Point) {
 
 	// copy the applicable bounds
 	for _, bound := range newGroup.Bounds {
-		if board.at(bound[0], bound[1]).GroupId != g.ID {
+		if board.At(bound[0], bound[1]).GroupId != g.ID {
 			g.Bounds = append(g.Bounds, bound)
 		}
 	}
@@ -300,13 +300,13 @@ func (g *group) connectGroup(newGroup group, board gameBoard, connection ...poin
 
 	// update point GroupIds on board
 	for _, p := range newGroup.Points {
-		board.at(p.X, p.Y).GroupId = g.ID
+		board.At(p.X, p.Y).GroupId = g.ID
 	}
 	// clean up unneeded group
-	delete(board.groups, newGroup.ID)
+	delete(board.Groups, newGroup.ID)
 }
 
-type point struct {
+type Point struct {
 	Color     string          `json:"color"`
 	GroupId   string          `json:"group"`
 	X         int             `json:"x"`
@@ -315,28 +315,28 @@ type point struct {
 	Territory string          `json:"territory"`
 }
 
-func (p point) adjPoints(board gameBoard) []point {
-	adjPoints := []point{}
+func (p Point) adjPoints(board GameBoard) []Point {
+	adjPoints := []Point{}
 	// top
 	if p.Y > 0 {
-		adjPoints = append(adjPoints, *board.at(p.X, p.Y-1))
+		adjPoints = append(adjPoints, *board.At(p.X, p.Y-1))
 	}
 	// right
 	if p.X < board.size()-1 {
-		adjPoints = append(adjPoints, *board.at(p.X+1, p.Y))
+		adjPoints = append(adjPoints, *board.At(p.X+1, p.Y))
 	}
 	// bottom
 	if p.Y < board.size()-1 {
-		adjPoints = append(adjPoints, *board.at(p.X, p.Y+1))
+		adjPoints = append(adjPoints, *board.At(p.X, p.Y+1))
 	}
 	// left
 	if p.X > 0 {
-		adjPoints = append(adjPoints, *board.at(p.X-1, p.Y))
+		adjPoints = append(adjPoints, *board.At(p.X-1, p.Y))
 	}
 	return adjPoints
 }
 
-func (p *point) assignGroup(board gameBoard) {
+func (p *Point) assignGroup(board GameBoard) {
 	for _, adjPoint := range p.adjPoints(board) {
 		if adjPoint.Color == p.Color {
 			p.GroupId = adjPoint.GroupId
@@ -349,10 +349,10 @@ func (p *point) assignGroup(board gameBoard) {
 		Bounds: [][2]int{},
 		Color:  p.Color,
 	}
-	board.groups[p.GroupId] = &g
+	board.Groups[p.GroupId] = &g
 }
 
-func (p point) isAnEye(board gameBoard) bool {
+func (p Point) isAnEye(board GameBoard) bool {
 	if p.Color != "" {
 		return false
 	}
@@ -365,7 +365,7 @@ func (p point) isAnEye(board gameBoard) bool {
 }
 
 // assumes point is an eye (has no open point on any side)
-func (p *point) calculateEyePermissions(board gameBoard) map[string]bool {
+func (p *Point) calculateEyePermissions(board GameBoard) map[string]bool {
 
 	adjGroups := map[string][]*group{
 		"black": {},
@@ -373,7 +373,7 @@ func (p *point) calculateEyePermissions(board gameBoard) map[string]bool {
 	}
 
 	for _, adjP := range p.adjPoints(board) {
-		adjGroup := board.groups[adjP.GroupId]
+		adjGroup := board.Groups[adjP.GroupId]
 		adjGroups[adjGroup.Color] = append(adjGroups[adjGroup.Color], adjGroup)
 	}
 	// if point is an eye, determine its play permissions (play inside eye can be suicide)
@@ -414,8 +414,8 @@ func oppositeColor(color string) string {
 	return "white"
 }
 
-type game struct {
-	Board    gameBoard      `json:"board"`
+type Game struct {
+	Board    GameBoard      `json:"board"`
 	Captures map[string]int `json:"captures"`
 	Score    map[string]int `json:"score"`
 	Ko       [2]int         `json:"ko"`
@@ -425,8 +425,8 @@ type game struct {
 	Winner   string         `json:"winner"`
 }
 
-func NewGame(boardSize int) game {
-	return game{
+func NewGame(boardSize int) Game {
+	return Game{
 		Board:    NewGameBoard(boardSize),
 		Captures: map[string]int{"black": 0, "white": 0},
 		Score:    map[string]int{"black": 0, "white": 0},
@@ -438,14 +438,14 @@ func NewGame(boardSize int) game {
 	}
 }
 
-func (g *game) isValidMove(p point) bool {
+func (g *Game) IsValidMove(p Point) bool {
 	inRangeXY := p.X < g.Board.size() && p.X >= 0 && p.Y < g.Board.size() && p.Y >= 0
 	validColor := p.Color == g.Turn
-	playIsPermitted := g.Board.at(p.X, p.Y).Permit[p.Color]
+	playIsPermitted := g.Board.At(p.X, p.Y).Permit[p.Color]
 	return !g.Ended && inRangeXY && validColor && playIsPermitted
 }
 
-func (g *game) play(p point) (score map[string]int) {
+func (g *Game) Play(p Point) (score map[string]int) {
 	board := &g.Board
 	board.addPoint(p)
 	capturedPoints := board.doCaptures(p.Color)
@@ -457,7 +457,7 @@ func (g *game) play(p point) (score map[string]int) {
 	g.Ko = [2]int{-1, -1}
 	singlePointCaptured := len(capturedPoints["white"])+len(capturedPoints["black"]) == 1
 	if singlePointCaptured {
-		newGroup := board.groups[board.at(p.X, p.Y).GroupId]
+		newGroup := board.Groups[board.At(p.X, p.Y).GroupId]
 		newPointInDanger := newGroup.size(*board) == 1 && newGroup.countLiberties(*board) == 1
 
 		if newPointInDanger {
@@ -474,7 +474,7 @@ func (g *game) play(p point) (score map[string]int) {
 	return g.Score
 }
 
-func (g *game) pass() {
+func (g *Game) Pass() {
 	if g.Passed {
 		g.Ended = true
 		g.Turn = ""
@@ -489,7 +489,7 @@ func (g *game) pass() {
 	}
 }
 
-func (g *game) resign(color string) {
+func (g *Game) Resign(color string) {
 	g.Ended = true
 	g.Winner = oppositeColor(color)
 }
