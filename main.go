@@ -22,11 +22,21 @@ func main() {
 	router.GET("/active-player", getActivePlayer)
 	router.GET("/game", getGame)
 	router.GET("/new-game", getNewGame)
+	router.GET("/pass", getPass)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
 
 var Game = NewGame(9)
+
+func getPass(c *gin.Context) {
+	Game.pass()
+	if Game.Ended {
+		c.JSON(http.StatusOK, "Game Over")
+	} else {
+		c.JSON(http.StatusOK, Game.Turn)
+	}
+}
 
 func getNewGame(c *gin.Context) {
 	Game = NewGame(9)
@@ -106,15 +116,19 @@ func simplifyBoard(b gameBoard) [][]simplePoint {
 }
 
 type simpleGame struct {
-	Board [][]simplePoint `json:"board"`
-	Score map[string]int  `json:"score"`
-	Turn  string          `json:"turn"`
+	Board  [][]simplePoint `json:"board"`
+	Score  map[string]int  `json:"score"`
+	Turn   string          `json:"turn"`
+	Passed bool            `json:"passed"`
+	Ended  bool            `json:"ended"`
 }
 
 func simplifyGame(g game) simpleGame {
 	return simpleGame{
-		Board: simplifyBoard(g.Board),
-		Score: g.Score,
-		Turn:  g.Turn,
+		Board:  simplifyBoard(g.Board),
+		Score:  g.Score,
+		Turn:   g.Turn,
+		Passed: g.Passed,
+		Ended:  g.Ended,
 	}
 }

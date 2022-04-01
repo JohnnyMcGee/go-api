@@ -417,6 +417,8 @@ type game struct {
 	Score    map[string]int `json:"score"`
 	Ko       [2]int         `json:"ko"`
 	Turn     string         `json:"turn"`
+	Passed   bool           `json:"passed"`
+	Ended    bool           `json:"ended"`
 }
 
 func NewGame(boardSize int) game {
@@ -426,6 +428,8 @@ func NewGame(boardSize int) game {
 		Score:    map[string]int{"black": 0, "white": 0},
 		Ko:       [2]int{-1, -1},
 		Turn:     "black",
+		Passed:   false,
+		Ended:    false,
 	}
 }
 
@@ -433,7 +437,7 @@ func (g *game) isValidMove(p point) bool {
 	inRangeXY := p.X < g.Board.size() && p.X >= 0 && p.Y < g.Board.size() && p.Y >= 0
 	validColor := p.Color == g.Turn
 	playIsPermitted := g.Board.at(p.X, p.Y).Permit[p.Color]
-	return inRangeXY && validColor && playIsPermitted
+	return !g.Ended && inRangeXY && validColor && playIsPermitted
 }
 
 func (g *game) play(p point) (score map[string]int) {
@@ -460,6 +464,16 @@ func (g *game) play(p point) (score map[string]int) {
 	board.applyPermissions(g.Ko)
 
 	g.Turn = oppositeColor(p.Color)
+	g.Passed = false
 
 	return g.Score
+}
+
+func (g *game) pass() {
+	if g.Passed {
+		g.Ended = true
+	} else {
+		g.Passed = true
+		g.Turn = oppositeColor(g.Turn)
+	}
 }
