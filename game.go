@@ -192,6 +192,9 @@ func (b *gameBoard) Score() map[string]int {
 			// merge adjacent territory if necessary
 			if leftIsTerritory := left != "" && left != "none" && left != t.ID; leftIsTerritory {
 				leftTerritory := territories[left]
+				if leftTerritory.Color != "" {
+					t.Color = compareColors(t.Color, leftTerritory.Color)
+				}
 				t.Points = append(t.Points, leftTerritory.Points...)
 				for _, p := range leftTerritory.Points {
 					b.at(p.X, p.Y).Territory = t.ID
@@ -419,6 +422,7 @@ type game struct {
 	Turn     string         `json:"turn"`
 	Passed   bool           `json:"passed"`
 	Ended    bool           `json:"ended"`
+	Winner   string         `json:"winner"`
 }
 
 func NewGame(boardSize int) game {
@@ -430,6 +434,7 @@ func NewGame(boardSize int) game {
 		Turn:     "black",
 		Passed:   false,
 		Ended:    false,
+		Winner:   "",
 	}
 }
 
@@ -472,8 +477,19 @@ func (g *game) play(p point) (score map[string]int) {
 func (g *game) pass() {
 	if g.Passed {
 		g.Ended = true
+		g.Turn = ""
+		if g.Score["black"] > g.Score["white"] {
+			g.Winner = "black"
+		} else if g.Score["white"] > g.Score["black"] {
+			g.Winner = "white"
+		}
 	} else {
 		g.Passed = true
 		g.Turn = oppositeColor(g.Turn)
 	}
+}
+
+func (g *game) resign(color string) {
+	g.Ended = true
+	g.Winner = oppositeColor(color)
 }

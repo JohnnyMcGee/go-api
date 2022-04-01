@@ -23,11 +23,17 @@ func main() {
 	router.GET("/game", getGame)
 	router.GET("/new-game", getNewGame)
 	router.GET("/pass", getPass)
+	router.GET("/resign", getResign)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
 
 var Game = NewGame(9)
+
+func getResign(c *gin.Context) {
+	Game.resign(Game.Turn)
+	c.JSON(http.StatusOK, "Game Over")
+}
 
 func getPass(c *gin.Context) {
 	Game.pass()
@@ -121,6 +127,7 @@ type simpleGame struct {
 	Turn   string          `json:"turn"`
 	Passed bool            `json:"passed"`
 	Ended  bool            `json:"ended"`
+	Winner string          `json:"winner"`
 }
 
 func simplifyGame(g game) simpleGame {
@@ -130,5 +137,6 @@ func simplifyGame(g game) simpleGame {
 		Turn:   g.Turn,
 		Passed: g.Passed,
 		Ended:  g.Ended,
+		Winner: g.Winner,
 	}
 }
