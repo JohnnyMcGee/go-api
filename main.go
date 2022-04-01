@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -37,8 +35,13 @@ var Game = game.NewGame(9)
 func getPlayerMove(c *gin.Context) {
 	color := c.Param("color")
 	move := player.RandomMove(Game, color)
-	Game.Play(move)
-	c.JSON(http.StatusOK, move)
+	if Game.IsValidMove(move) {
+		Game.Play(move)
+		c.JSON(http.StatusOK, move)
+	} else {
+		Game.Pass()
+		c.JSON(http.StatusOK, "pass")
+	}
 }
 
 func getResign(c *gin.Context) {
@@ -98,10 +101,7 @@ func postMove(c *gin.Context) {
 	}
 
 	if Game.IsValidMove(newPoint) {
-		start := time.Now()
 		Game.Play(newPoint)
-		end := time.Now()
-		fmt.Printf("Move executed in %v\n", end.Sub(start))
 		c.IndentedJSON(http.StatusCreated, Game.Board.At(newPoint.X, newPoint.Y))
 	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
