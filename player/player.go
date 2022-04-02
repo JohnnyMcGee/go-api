@@ -1,6 +1,6 @@
-package player
+// package player
 
-// package main
+package main
 
 import (
 	"fmt"
@@ -13,28 +13,28 @@ import (
 var Game game.Game = game.NewGame(9)
 var color = "black"
 
-// func main() {
-// 	setupPoints := []game.Point{
-// 		{X: 1, Y: 2, Color: "black"},
-// 		{X: 2, Y: 2, Color: "white"},
-// 		{X: 7, Y: 4, Color: "black"},
-// 		{X: 2, Y: 3, Color: "white"},
-// 		{X: 7, Y: 5, Color: "black"},
-// 		{X: 0, Y: 2, Color: "white"},
-// 		{X: 3, Y: 2, Color: "black"},
-// 		{X: 8, Y: 5, Color: "white"},
-// 		{X: 0, Y: 2, Color: "black"},
-// 	}
+func main() {
+	setupPoints := []game.Point{
+		{X: 1, Y: 2, Color: "black"},
+		{X: 2, Y: 2, Color: "white"},
+		{X: 7, Y: 4, Color: "black"},
+		{X: 2, Y: 3, Color: "white"},
+		{X: 7, Y: 5, Color: "black"},
+		{X: 0, Y: 2, Color: "white"},
+		{X: 3, Y: 2, Color: "black"},
+		{X: 8, Y: 5, Color: "white"},
+		{X: 0, Y: 2, Color: "black"},
+	}
 
-// 	for _, p := range setupPoints {
-// 		if Game.IsValidMove(p) {
-// 			Game.Play(p)
-// 		}
-// 	}
+	for _, p := range setupPoints {
+		if Game.IsValidMove(p) {
+			Game.Play(p)
+		}
+	}
 
-// 	newMove := Move(Game, color)
-// 	fmt.Println(newMove)
-// }
+	newMove := Move(Game, color)
+	fmt.Println(newMove)
+}
 
 func legalMoves(g game.Game, color string) []game.Point {
 	moves := []game.Point{}
@@ -66,9 +66,9 @@ func evaluateMoves(g game.Game, color string) [][2]int {
 	return moves
 }
 
-func staticEval(g game.Game, color string) int {
+func staticEval(g game.Game, color string) float64 {
 	basicScore := g.Score[color] - g.Score[game.OppositeColor(color)]
-	groupScore := 0
+	groupScore := 0.0
 
 	eyeScore := func(grp game.Group) int {
 		score := 0
@@ -87,24 +87,31 @@ func staticEval(g game.Game, color string) int {
 		return score
 	}
 
+	libsPerColor := map[string]float64{"white": 0, "black": 0}
+	groupsPerColor := map[string]float64{"white": 0, "black": 0}
 	for _, grp := range g.Board.Groups {
 		if grp.Color == color {
-			groupScore += grp.CountLiberties(g.Board)
-			groupScore += eyeScore(*grp)
+			libsPerColor[color] += float64(grp.CountLiberties(g.Board))
+			groupsPerColor[color]++
+			groupScore += float64(eyeScore(*grp))
 
 		} else if grp.Color == game.OppositeColor(color) {
-			groupScore -= grp.CountLiberties(g.Board)
-			groupScore -= eyeScore(*grp)
+			libsPerColor[game.OppositeColor(color)] += float64(grp.CountLiberties(g.Board))
+			groupsPerColor[game.OppositeColor(color)]++
+			groupScore -= float64(eyeScore(*grp))
 		}
 	}
-	return basicScore + groupScore
+	groupScore += ((groupsPerColor[color]) / libsPerColor[color])
+	groupScore -= (groupsPerColor[game.OppositeColor(color)] / libsPerColor[game.OppositeColor(color)])
+
+	return float64(basicScore) + groupScore
 }
 
 // Recursively evaluate possible moves and counter-moves using minimax algorithm
 // returns eval score and slice of moves which result in that score
 func minimax(g game.Game, depth int, maximize bool) (float64, []game.Point) {
 	if depth == 0 || g.Ended {
-		var eval int
+		var eval float64
 		if maximize {
 			eval = staticEval(g, g.Turn)
 		} else {
