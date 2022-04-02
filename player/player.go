@@ -55,16 +55,21 @@ func evaluateMoves(g game.Game, color string) [][2]int {
 
 // Recursively evaluate possible moves and counter-moves using minimax algorithm
 // returns eval score and slice of moves which result in that score
-func minimax(g game.Game, depth int, color string) (float64, []game.Point) {
+func minimax(g game.Game, depth int, maximize bool) (float64, []game.Point) {
 	if depth == 0 || g.Ended {
-		staticEval := g.Score[color] - g.Score[game.OppositeColor(color)]
+		var staticEval int
+		if maximize {
+			staticEval = g.Score[g.Turn] - g.Score[game.OppositeColor(g.Turn)]
+		} else {
+			staticEval = g.Score[game.OppositeColor(g.Turn)] - g.Score[g.Turn]
+		}
 		return float64(staticEval), []game.Point{}
 	}
 
 	// Evaluate resulting game state for a given point
 	// Returns result state, true for a valid move, or current state, false for invalid move
 	testPoint := func(p *game.Point) (game.Game, bool) {
-		testPoint := game.Point{X: p.X, Y: p.Y, Color: color}
+		testPoint := game.Point{X: p.X, Y: p.Y, Color: g.Turn}
 		if g.IsValidMove(testPoint) {
 			testGame := g.DeepCopy()
 			testGame.Play(testPoint)
@@ -74,12 +79,12 @@ func minimax(g game.Game, depth int, color string) (float64, []game.Point) {
 		}
 	}
 
-	if maximize := g.Turn == color; maximize {
+	if maximize {
 		maxEval := math.Inf(-1)
 		moves := []game.Point{}
 		g.Board.ForEachPoint(func(p *game.Point) {
 			if testGame, ok := testPoint(p); ok {
-				eval, _ := minimax(testGame, depth-1, color)
+				eval, _ := minimax(testGame, depth-1, false)
 				if eval > maxEval {
 					moves = []game.Point{*p}
 					maxEval = eval
@@ -87,14 +92,18 @@ func minimax(g game.Game, depth int, color string) (float64, []game.Point) {
 					moves = append(moves, *p)
 				}
 			}
+			if depth == 3 {
+				fmt.Printf("Move: %v, %v: maxEval: %v\n", p.X, p.Y, maxEval)
+			}
 		})
 		return maxEval, moves
+
 	} else {
 		minEval := math.Inf(1)
 		moves := []game.Point{}
 		g.Board.ForEachPoint(func(p *game.Point) {
 			if testGame, ok := testPoint(p); ok {
-				eval, _ := minimax(testGame, depth-1, color)
+				eval, _ := minimax(testGame, depth-1, true)
 				if eval < minEval {
 					moves = []game.Point{*p}
 					minEval = eval
@@ -122,7 +131,7 @@ func RandomMove(color string, moves []game.Point) game.Point {
 func Move(g game.Game, color string) game.Point {
 	p := game.Point{X: -1, Y: -1, Color: ""}
 
-	eval, moves := minimax(g, 50, color)
+	eval, moves := minimax(g, 3, true)
 	fmt.Printf("Eval Score: %v\nNum Equiv Moves: %v\n", eval, len(moves))
 
 	if len(moves) == 0 {
