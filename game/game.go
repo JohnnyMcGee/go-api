@@ -508,7 +508,7 @@ func (g *Game) IsValidMove(p Point) bool {
 	return false
 }
 
-func (g *Game) Play(p Point) (score map[string]int) {
+func (g *Game) PlayWithoutScoring(p Point) {
 	board := &g.Board
 	board.addPoint(p)
 	capturedPoints := board.doCaptures(p.Color)
@@ -528,12 +528,15 @@ func (g *Game) Play(p Point) (score map[string]int) {
 			g.Ko = [2]int{koPoint.X, koPoint.Y}
 		}
 	}
-	g.Score = board.Score()
 	board.applyPermissions(g.Ko)
 
 	g.Turn = OppositeColor(p.Color)
 	g.Passed = false
+}
 
+func (g *Game) Play(p Point) (score map[string]int) {
+	g.PlayWithoutScoring(p)
+	g.Score = g.Board.Score()
 	return g.Score
 }
 
