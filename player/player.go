@@ -14,29 +14,68 @@ import (
 // var color = "black"
 
 // func main() {
-// 	setupPoints := []game.Point{
-// 		{X: 1, Y: 2, Color: "black"},
-// 		{X: 2, Y: 2, Color: "white"},
-// 		{X: 7, Y: 4, Color: "black"},
-// 		{X: 2, Y: 3, Color: "white"},
-// 		{X: 7, Y: 5, Color: "black"},
-// 		{X: 0, Y: 2, Color: "white"},
-// 		{X: 3, Y: 2, Color: "black"},
-// 		{X: 8, Y: 5, Color: "white"},
-// 		{X: 0, Y: 2, Color: "black"},
-// 	}
-
-// 	for _, p := range setupPoints {
-// 		if Game.IsValidMove(p) {
-// 			Game.Play(p)
-// 		}
-// 	}
-
-// 	newMove := Move(Game, color)
-// 	fmt.Println(newMove)
+// setupPoints := []game.Point{
+// {X: 1, Y: 2, Color: "black"},
+// {X: 2, Y: 2, Color: "white"},
+// {X: 7, Y: 4, Color: "black"},
+// {X: 2, Y: 3, Color: "white"},
+// {X: 7, Y: 5, Color: "black"},
+// {X: 0, Y: 2, Color: "white"},
+// {X: 3, Y: 2, Color: "black"},
+// {X: 8, Y: 5, Color: "white"},
+// {X: 0, Y: 2, Color: "black"},
 // }
 
-func staticEvalByGroup(g game.Game, color string) float64 {
+// for _, p := range setupPoints {
+// if Game.IsValidMove(p) {
+// Game.Play(p)
+// }
+// }
+
+// newMove := Move(Game, color)
+// fmt.Println(newMove)
+// }
+
+// recursively check if point is part of an area enclosed by a given group
+func isAnEye(g game.Game, p game.Point, grp game.Group, checked []game.Point, depth int) ([]game.Point, bool) {
+	// verify that this point was not part of a prior 'isAnyEye' search
+	for _, checkedPoint := range checked {
+		if checkedPoint.X == p.X && checkedPoint.Y == p.Y {
+			checked = append(checked, p)
+			return checked, true
+		}
+	}
+	// search around the point to see if it is enclosed on all sides
+	for _, adjP := range p.AdjPoints(g.Board) {
+		if adjP.GroupId != grp.ID {
+			if depth == 0 || adjP.Color != "" {
+				return checked, false
+			}
+			checked = append(checked, p)
+			return isAnEye(g, adjP, grp, checked, depth-1)
+		}
+	}
+	checked = append(checked, p)
+	return checked, true
+}
+
+type EvalConfig struct {
+	eyeRecursion int
+	eyeWeight    float64
+	libWeight    float64
+	areaWeight   float64
+	sizeWeight   float64
+}
+
+var DefaultConfig = EvalConfig{
+	eyeRecursion: 8,
+	eyeWeight:    1,
+	libWeight:    .5,
+	areaWeight:   .14,
+	sizeWeight:   .12,
+}
+
+func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 	score := map[string]float64{"black": 0, "white": 0}
 	for _, grp := range g.Board.Groups {
 		numEyes := 0
@@ -45,6 +84,8 @@ func staticEvalByGroup(g game.Game, color string) float64 {
 		xMin := math.Inf(1)
 		yMax := math.Inf(-1)
 		yMin := math.Inf(1)
+
+		checkedPoints := []game.Point{}
 
 		for _, b := range grp.Bounds {
 			bPoint := *g.Board.At(b[0], b[1])
@@ -56,32 +97,35 @@ func staticEvalByGroup(g game.Game, color string) float64 {
 
 			if numEyes < 2 && bPoint.Color == "" {
 				numLiberties++
-				eye := 1
-
-				for _, p := range bPoint.AdjPoints(g.Board) {
-					if p.GroupId != grp.ID {
-						eye = 0
-						break
-					}
-					numEyes += eye
+				// verify that this point was not part of a prior 'isAnyEye' search
+				var isInCheckedPoints bool
+				for _, cp := range checkedPoints {
+					isInCheckedPoints = cp.X == bPoint.X && cp.Y == bPoint.Y
+				}
+				// search area around the point to see if it is fully enclosed (is an eye)
+				eye := false
+				if !isInCheckedPoints {
+					checkedPoints, eye = isAnEye(g, bPoint, *grp, checkedPoints, config.eyeRecursion)
+				}
+				if eye {
+					numEyes++
 				}
 			}
 
 			if numEyes > 1 {
-				score[grp.Color] += 4 // multiple eyes weighted high
+				score[grp.Color] += 4 * config.eyeWeight // multiple eyes weighted high
 			} else {
 				if numEyes == 1 {
-					score[grp.Color] += 2 // single eye weighted slightly lower
+					score[grp.Color] += 2 * config.eyeWeight // single eye weighted slightly lower
 				}
-				score[grp.Color] += float64(numLiberties) * .25 // liberties weighted lower than eyes
+				score[grp.Color] += float64(numLiberties) * config.libWeight // liberties weighted lower than eyes
 			}
 
 			area := (xMax - xMin - 1) * (yMax - yMin - 1)
-			score[grp.Color] += area * .5 // area weighted lower than liberties
+			score[grp.Color] += area * config.areaWeight // area weighted lower than liberties
 
 			size := float64(grp.Size())
-			score[grp.Color] += size * .2 // size weighted lower than area
-
+			score[grp.Color] += size * config.sizeWeight // size weighted lower than area
 		}
 	}
 
@@ -89,44 +133,44 @@ func staticEvalByGroup(g game.Game, color string) float64 {
 }
 
 // func staticEval(g game.Game, color string) float64 {
-// 	basicScore := g.Score[color] - g.Score[game.OppositeColor(color)]
-// 	groupScore := 0.0
+// basicScore := g.Score[color] - g.Score[game.OppositeColor(color)]
+// groupScore := 0.0
 
-// 	eyeScore := func(grp game.Group) int {
-// 		score := 0
-// 		for _, b := range grp.Bounds {
-// 			numEyes := 0
-// 			if g.Board.At(b[0], b[1]).IsAnEye(g.Board) {
-// 				numEyes++
-// 			}
-// 			if numEyes > 0 {
-// 				score += 1
-// 			}
-// 			if numEyes > 1 {
-// 				score += 3
-// 			}
-// 		}
-// 		return score
-// 	}
+// eyeScore := func(grp game.Group) int {
+// score := 0
+// for _, b := range grp.Bounds {
+// numEyes := 0
+// if g.Board.At(b[0], b[1]).IsAnEye(g.Board) {
+// numEyes++
+// }
+// if numEyes > 0 {
+// score += 1
+// }
+// if numEyes > 1 {
+// score += 3
+// }
+// }
+// return score
+// }
 
-// 	libsPerColor := map[string]float64{"white": 0, "black": 0}
-// 	groupsPerColor := map[string]float64{"white": 0, "black": 0}
-// 	for _, grp := range g.Board.Groups {
-// 		if grp.Color == color {
-// 			libsPerColor[color] += float64(grp.CountLiberties(g.Board))
-// 			groupsPerColor[color]++
-// 			groupScore += float64(eyeScore(*grp))
+// libsPerColor := map[string]float64{"white": 0, "black": 0}
+// groupsPerColor := map[string]float64{"white": 0, "black": 0}
+// for _, grp := range g.Board.Groups {
+// if grp.Color == color {
+// libsPerColor[color] += float64(grp.CountLiberties(g.Board))
+// groupsPerColor[color]++
+// groupScore += float64(eyeScore(*grp))
 
-// 		} else if grp.Color == game.OppositeColor(color) {
-// 			libsPerColor[game.OppositeColor(color)] += float64(grp.CountLiberties(g.Board))
-// 			groupsPerColor[game.OppositeColor(color)]++
-// 			groupScore -= float64(eyeScore(*grp))
-// 		}
-// 	}
-// 	groupScore += ((groupsPerColor[color]) / libsPerColor[color])
-// 	groupScore -= (groupsPerColor[game.OppositeColor(color)] / libsPerColor[game.OppositeColor(color)])
+// } else if grp.Color == game.OppositeColor(color) {
+// libsPerColor[game.OppositeColor(color)] += float64(grp.CountLiberties(g.Board))
+// groupsPerColor[game.OppositeColor(color)]++
+// groupScore -= float64(eyeScore(*grp))
+// }
+// }
+// groupScore += ((groupsPerColor[color]) / libsPerColor[color])
+// groupScore -= (groupsPerColor[game.OppositeColor(color)] / libsPerColor[game.OppositeColor(color)])
 
-// 	return float64(basicScore) + groupScore
+// return float64(basicScore) + groupScore
 // }
 
 // Recursively evaluate possible moves and counter-moves using minimax algorithm
@@ -135,9 +179,9 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 	if depth == 0 || g.Ended {
 		var eval float64
 		if maximize {
-			eval = staticEvalByGroup(g, g.Turn)
+			eval = staticEvalByGroup(g, g.Turn, DefaultConfig)
 		} else {
-			eval = staticEvalByGroup(g, game.OppositeColor(g.Turn))
+			eval = staticEvalByGroup(g, game.OppositeColor(g.Turn), DefaultConfig)
 		}
 		return float64(eval), []game.Point{}
 	}
