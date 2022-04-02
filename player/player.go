@@ -14,13 +14,26 @@ var Game game.Game = game.NewGame(9)
 var color = "black"
 
 // func main() {
-// for i := 0; i < 10; i++ {
-// time.Sleep(100)
-// move := RandomMove(Game)
-// fmt.Println(move)
-// Game.Play(move)
-// }
+// 	setupPoints := []game.Point{
+// 		{X: 1, Y: 2, Color: "black"},
+// 		{X: 2, Y: 2, Color: "white"},
+// 		{X: 7, Y: 4, Color: "black"},
+// 		{X: 2, Y: 3, Color: "white"},
+// 		{X: 7, Y: 5, Color: "black"},
+// 		{X: 0, Y: 2, Color: "white"},
+// 		{X: 3, Y: 2, Color: "black"},
+// 		{X: 8, Y: 5, Color: "white"},
+// 		{X: 0, Y: 2, Color: "black"},
+// 	}
 
+// 	for _, p := range setupPoints {
+// 		if Game.IsValidMove(p) {
+// 			Game.Play(p)
+// 		}
+// 	}
+
+// 	newMove := Move(Game, color)
+// 	fmt.Println(newMove)
 // }
 
 func legalMoves(g game.Game, color string) []game.Point {
@@ -53,17 +66,51 @@ func evaluateMoves(g game.Game, color string) [][2]int {
 	return moves
 }
 
+func staticEval(g game.Game, color string) int {
+	basicScore := g.Score[color] - g.Score[game.OppositeColor(color)]
+	groupScore := 0
+
+	eyeScore := func(grp game.Group) int {
+		score := 0
+		for _, b := range grp.Bounds {
+			numEyes := 0
+			if g.Board.At(b[0], b[1]).IsAnEye(g.Board) {
+				numEyes++
+			}
+			if numEyes > 0 {
+				score += 1
+			}
+			if numEyes > 1 {
+				score += 3
+			}
+		}
+		return score
+	}
+
+	for _, grp := range g.Board.Groups {
+		if grp.Color == color {
+			groupScore += grp.CountLiberties(g.Board)
+			groupScore += eyeScore(*grp)
+
+		} else if grp.Color == game.OppositeColor(color) {
+			groupScore -= grp.CountLiberties(g.Board)
+			groupScore -= eyeScore(*grp)
+		}
+	}
+	return basicScore + groupScore
+}
+
 // Recursively evaluate possible moves and counter-moves using minimax algorithm
 // returns eval score and slice of moves which result in that score
 func minimax(g game.Game, depth int, maximize bool) (float64, []game.Point) {
 	if depth == 0 || g.Ended {
-		var staticEval int
+		var eval int
 		if maximize {
-			staticEval = g.Score[g.Turn] - g.Score[game.OppositeColor(g.Turn)]
+			eval = staticEval(g, g.Turn)
 		} else {
-			staticEval = g.Score[game.OppositeColor(g.Turn)] - g.Score[g.Turn]
+			eval = staticEval(g, game.OppositeColor(g.Turn))
 		}
-		return float64(staticEval), []game.Point{}
+		return float64(eval), []game.Point{}
 	}
 
 	// Evaluate resulting game state for a given point
@@ -86,14 +133,19 @@ func minimax(g game.Game, depth int, maximize bool) (float64, []game.Point) {
 			if testGame, ok := testPoint(p); ok {
 				eval, _ := minimax(testGame, depth-1, false)
 				if eval > maxEval {
+					diff := eval - maxEval
 					moves = []game.Point{*p}
 					maxEval = eval
+					if depth == 3 {
+						fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, diff, maxEval)
+					}
 				} else if eval == maxEval {
 					moves = append(moves, *p)
+					if depth == 3 {
+						fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, eval-maxEval, maxEval)
+					}
 				}
-			}
-			if depth == 3 {
-				fmt.Printf("Move: %v, %v: maxEval: %v\n", p.X, p.Y, maxEval)
+
 			}
 		})
 		return maxEval, moves
