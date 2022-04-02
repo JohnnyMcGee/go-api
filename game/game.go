@@ -28,7 +28,7 @@ func (b GameBoard) DeepCopy() GameBoard {
 		bPointsCopy[i] = make([]*Point, b.size(), b.size())
 	}
 	b.ForEachPoint(func(p *Point) {
-		pCopy := *p
+		pCopy := (*p).DeepCopy()
 		bPointsCopy[p.Y][p.X] = &pCopy
 	})
 	bGroupsCopy := map[string]*group{}
@@ -253,10 +253,15 @@ type group struct {
 func (g group) DeepCopy() group {
 	gPointsCopy := make([]*Point, len(g.Points), len(g.Points))
 	for i, p := range g.Points {
-		pCopy := *p
+		pCopy := (*p).DeepCopy()
 		gPointsCopy[i] = &pCopy
 	}
+	boundsCopy := make([][2]int, len(g.Bounds), len(g.Bounds))
+	for i := range g.Bounds {
+		boundsCopy[i] = g.Bounds[i]
+	}
 	g.Points = gPointsCopy
+	g.Bounds = boundsCopy
 	return g
 }
 
@@ -343,6 +348,15 @@ type Point struct {
 	Y         int             `json:"y"`
 	Permit    map[string]bool `json:"permit"`
 	Territory string          `json:"territory"`
+}
+
+func (p Point) DeepCopy() Point {
+	permitCopy := make(map[string]bool)
+	for k, v := range p.Permit {
+		permitCopy[k] = v
+	}
+	p.Permit = permitCopy
+	return p
 }
 
 func (p Point) adjPoints(board GameBoard) []Point {
@@ -470,6 +484,14 @@ func NewGame(boardSize int) Game {
 
 func (g Game) DeepCopy() Game {
 	g.Board = g.Board.DeepCopy()
+	capturesCopy := make(map[string]int)
+	for k, v := range g.Captures {
+		capturesCopy[k] = v
+	}
+	scoreCopy := make(map[string]int)
+	for k, v := range g.Score {
+		scoreCopy[k] = v
+	}
 	return g
 }
 
