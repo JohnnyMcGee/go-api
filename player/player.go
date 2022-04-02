@@ -66,6 +66,57 @@ import (
 // 	return moves
 // }
 
+func staticEvalByGroup(g game.Game, color string) float64 {
+	score := map[string]float64{"black": 0, "white": 0}
+	for _, grp := range g.Board.Groups {
+		numEyes := 0
+		numLiberties := 0
+		xMax := math.Inf(-1)
+		xMin := math.Inf(1)
+		yMax := math.Inf(-1)
+		yMin := math.Inf(1)
+
+		for _, b := range grp.Bounds {
+			bPoint := g.Board.At(b[0], b[1])
+
+			xMax = math.Max(float64(b[0]), xMax)
+			xMin = math.Min(float64(b[0]), xMin)
+			yMax = math.Max(float64(b[1]), yMax)
+			yMin = math.Min(float64(b[1]), yMin)
+
+			if numEyes < 2 && bPoint.Color == "" {
+				numLiberties++
+				eye := 1
+				for _, p := range g.Board.At(b[0], b[1]).AdjPoints(g.Board) {
+					if p.GroupId != grp.ID {
+						eye = 0
+						break
+					}
+				}
+				numEyes += eye
+			}
+		}
+
+		if numEyes > 1 {
+			score[grp.Color] += 2 // multiple eyes weighted high
+		} else {
+			if numEyes == 1 {
+				score[grp.Color] += 1 // single eye weighted slightly lower
+			}
+			score[grp.Color] += float64(numLiberties) * .25 // liberties weighted lower than eyes
+		}
+
+		area := (xMax - xMin - 1) * (yMax - yMin - 1)
+		score[grp.Color] += area * .2 // area weighted lower than liberties
+
+		size := float64(grp.Size())
+		score[grp.Color] += size * .1 // size weighted lower than area
+
+	}
+
+	return score[color] - score[game.OppositeColor(color)]
+}
+
 func staticEval(g game.Game, color string) float64 {
 	basicScore := g.Score[color] - g.Score[game.OppositeColor(color)]
 	groupScore := 0.0
@@ -113,9 +164,9 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 	if depth == 0 || g.Ended {
 		var eval float64
 		if maximize {
-			eval = staticEval(g, g.Turn)
+			eval = staticEvalByGroup(g, g.Turn)
 		} else {
-			eval = staticEval(g, game.OppositeColor(g.Turn))
+			eval = staticEvalByGroup(g, game.OppositeColor(g.Turn))
 		}
 		return float64(eval), []game.Point{}
 	}

@@ -81,7 +81,7 @@ func (b *GameBoard) addPoint(p Point) {
 	pointGroup.addPoint(p, *b)
 	// merge any overlapping groups into one
 	pointsByGroup := map[string][]Point{}
-	for _, adjPoint := range p.adjPoints(*b) {
+	for _, adjPoint := range p.AdjPoints(*b) {
 		if adjPoint.Color == p.Color && adjPoint.GroupId != p.GroupId {
 			pointsByGroup[adjPoint.GroupId] = append(pointsByGroup[adjPoint.GroupId], adjPoint)
 		}
@@ -282,14 +282,14 @@ func (g Group) CountLiberties(board GameBoard) int {
 }
 
 // calculate number of stones (colored points) in a Group
-func (g Group) size() int {
+func (g Group) Size() int {
 	return len(g.Points)
 }
 
 func (g *Group) addPoint(p Point, board GameBoard) {
 	g.Points = append(g.Points, &p)
 	// add adjacent points to selected Group, unless the point belongs to the Group
-	for _, adjP := range p.adjPoints(board) {
+	for _, adjP := range p.AdjPoints(board) {
 
 		bound := [2]int{adjP.X, adjP.Y}
 
@@ -297,7 +297,7 @@ func (g *Group) addPoint(p Point, board GameBoard) {
 			g.Bounds = append(g.Bounds, bound)
 		}
 	}
-	if g.size() > 1 {
+	if g.Size() > 1 {
 		g.recalculateBounds(p)
 	}
 }
@@ -363,29 +363,29 @@ func (p Point) DeepCopy() Point {
 	return p
 }
 
-func (p Point) adjPoints(board GameBoard) []Point {
-	adjPoints := []Point{}
+func (p Point) AdjPoints(board GameBoard) []Point {
+	AdjPoints := []Point{}
 	// top
 	if p.Y > 0 {
-		adjPoints = append(adjPoints, *board.At(p.X, p.Y-1))
+		AdjPoints = append(AdjPoints, *board.At(p.X, p.Y-1))
 	}
 	// right
 	if p.X < board.size()-1 {
-		adjPoints = append(adjPoints, *board.At(p.X+1, p.Y))
+		AdjPoints = append(AdjPoints, *board.At(p.X+1, p.Y))
 	}
 	// bottom
 	if p.Y < board.size()-1 {
-		adjPoints = append(adjPoints, *board.At(p.X, p.Y+1))
+		AdjPoints = append(AdjPoints, *board.At(p.X, p.Y+1))
 	}
 	// left
 	if p.X > 0 {
-		adjPoints = append(adjPoints, *board.At(p.X-1, p.Y))
+		AdjPoints = append(AdjPoints, *board.At(p.X-1, p.Y))
 	}
-	return adjPoints
+	return AdjPoints
 }
 
 func (p *Point) assignGroup(board GameBoard) {
-	for _, adjPoint := range p.adjPoints(board) {
+	for _, adjPoint := range p.AdjPoints(board) {
 		if adjPoint.Color == p.Color {
 			p.GroupId = adjPoint.GroupId
 			return
@@ -404,7 +404,7 @@ func (p Point) IsAnEye(board GameBoard) bool {
 	if p.Color != "" {
 		return false
 	}
-	for _, adjP := range p.adjPoints(board) {
+	for _, adjP := range p.AdjPoints(board) {
 		if adjP.GroupId == "" {
 			return false
 		}
@@ -420,7 +420,7 @@ func (p *Point) calculateEyePermissions(board GameBoard) map[string]bool {
 		"white": {},
 	}
 
-	for _, adjP := range p.adjPoints(board) {
+	for _, adjP := range p.AdjPoints(board) {
 		adjGroup := board.Groups[adjP.GroupId]
 		adjGroups[adjGroup.Color] = append(adjGroups[adjGroup.Color], adjGroup)
 	}
@@ -521,7 +521,7 @@ func (g *Game) Play(p Point) (score map[string]int) {
 	singlePointCaptured := len(capturedPoints["white"])+len(capturedPoints["black"]) == 1
 	if singlePointCaptured {
 		newGroup := board.Groups[board.At(p.X, p.Y).GroupId]
-		newPointInDanger := newGroup.size() == 1 && newGroup.CountLiberties(*board) == 1
+		newPointInDanger := newGroup.Size() == 1 && newGroup.CountLiberties(*board) == 1
 
 		if newPointInDanger {
 			koPoint := capturedPoints[OppositeColor(p.Color)][0]
