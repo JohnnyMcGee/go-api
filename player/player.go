@@ -187,24 +187,28 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 	if maximize {
 		maxEval := math.Inf(-1)
 		moves := []game.Point{}
+		evaluate := func(testGame game.Game, p *game.Point) float64 {
+			eval, _ := minimax(testGame, depth-1, alpha, beta, false)
+			if eval > maxEval {
+				diff := eval - maxEval
+				moves = []game.Point{*p}
+				maxEval = eval
+				if depth == 3 {
+					fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, diff, maxEval)
+				}
+			} else if eval == maxEval {
+				moves = append(moves, *p)
+				if depth == 3 {
+					fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, eval-maxEval, maxEval)
+				}
+			}
+			return eval
+		}
 	OUTERMAX:
 		for _, row := range g.Board.Getpoints() {
 			for _, p := range row {
 				if testGame, ok := testPoint(p); ok {
-					eval, _ := minimax(testGame, depth-1, alpha, beta, false)
-					if eval > maxEval {
-						diff := eval - maxEval
-						moves = []game.Point{*p}
-						maxEval = eval
-						if depth == 3 {
-							fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, diff, maxEval)
-						}
-					} else if eval == maxEval {
-						moves = append(moves, *p)
-						if depth == 3 {
-							fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, eval-maxEval, maxEval)
-						}
-					}
+					eval := evaluate(testGame, p)
 					alpha = math.Max(alpha, eval)
 					if beta <= alpha {
 						break OUTERMAX
@@ -217,17 +221,22 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 	} else {
 		minEval := math.Inf(1)
 		moves := []game.Point{}
+
+		evaluate := func(testGame game.Game, p *game.Point) float64 {
+			eval, _ := minimax(testGame, depth-1, alpha, beta, true)
+			if eval < minEval {
+				moves = []game.Point{*p}
+				minEval = eval
+			} else if eval == minEval {
+				moves = append(moves, *p)
+			}
+			return eval
+		}
 	OUTERMIN:
 		for _, row := range g.Board.Getpoints() {
 			for _, p := range row {
 				if testGame, ok := testPoint(p); ok {
-					eval, _ := minimax(testGame, depth-1, alpha, beta, true)
-					if eval < minEval {
-						moves = []game.Point{*p}
-						minEval = eval
-					} else if eval == minEval {
-						moves = append(moves, *p)
-					}
+					eval := evaluate(testGame, p)
 					beta = math.Min(alpha, eval)
 					if beta <= alpha {
 						break OUTERMIN
