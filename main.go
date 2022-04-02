@@ -34,7 +34,7 @@ var Game = game.NewGame(9)
 
 func getPlayerMove(c *gin.Context) {
 	color := c.Param("color")
-	move := player.RandomMove(Game, color)
+	move := player.Move(Game, color)
 	if Game.IsValidMove(move) {
 		Game.Play(move)
 		c.JSON(http.StatusOK, move)

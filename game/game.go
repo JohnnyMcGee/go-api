@@ -22,6 +22,26 @@ func NewGameBoard(size int) GameBoard {
 	}
 }
 
+func (b GameBoard) DeepCopy() GameBoard {
+	bPointsCopy := make([][]*Point, b.size(), b.size())
+	for i := range bPointsCopy {
+		bPointsCopy[i] = make([]*Point, b.size(), b.size())
+	}
+	b.ForEachPoint(func(p *Point) {
+		pCopy := *p
+		bPointsCopy[p.Y][p.X] = &pCopy
+	})
+	bGroupsCopy := map[string]*group{}
+	for id, g := range b.Groups {
+		gCopy := g.DeepCopy()
+		bGroupsCopy[id] = &gCopy
+	}
+	return GameBoard{
+		points: bPointsCopy,
+		Groups: bGroupsCopy,
+	}
+}
+
 type GameBoard struct {
 	points [][]*Point
 	Groups map[string]*group
@@ -85,7 +105,7 @@ func (b *GameBoard) applyPermissions(ko [2]int) {
 }
 
 func (b *GameBoard) doCaptures(friendlyColor string) (capturedPoints map[string][]Point) {
-	enemyColor := oppositeColor(friendlyColor)
+	enemyColor := OppositeColor(friendlyColor)
 
 	captureGroupsByColor := func(color string) []*group {
 		captured := []*group{}
@@ -228,6 +248,16 @@ type group struct {
 	Color  string   `json:"color"`
 	Bounds [][2]int `json:"bounds"`
 	Points []*Point `json:"points"`
+}
+
+func (g group) DeepCopy() group {
+	gPointsCopy := make([]*Point, len(g.Points), len(g.Points))
+	for i, p := range g.Points {
+		pCopy := *p
+		gPointsCopy[i] = &pCopy
+	}
+	g.Points = gPointsCopy
+	return g
 }
 
 // a "liberty" is an empty point adjacent to the group
@@ -407,7 +437,7 @@ func (p *Point) calculateEyePermissions(board GameBoard) map[string]bool {
 	return map[string]bool{"white": whitePermitted, "black": blackPermitted}
 }
 
-func oppositeColor(color string) string {
+func OppositeColor(color string) string {
 	if color == "white" {
 		return "black"
 	}
@@ -438,6 +468,11 @@ func NewGame(boardSize int) Game {
 	}
 }
 
+func (g Game) DeepCopy() Game {
+	g.Board = g.Board.DeepCopy()
+	return g
+}
+
 func (g *Game) IsValidMove(p Point) bool {
 	inRangeXY := p.X < g.Board.size() && p.X >= 0 && p.Y < g.Board.size() && p.Y >= 0
 	validColor := p.Color == g.Turn
@@ -463,14 +498,14 @@ func (g *Game) Play(p Point) (score map[string]int) {
 		newPointInDanger := newGroup.size() == 1 && newGroup.countLiberties(*board) == 1
 
 		if newPointInDanger {
-			koPoint := capturedPoints[oppositeColor(p.Color)][0]
+			koPoint := capturedPoints[OppositeColor(p.Color)][0]
 			g.Ko = [2]int{koPoint.X, koPoint.Y}
 		}
 	}
 	g.Score = board.Score()
 	board.applyPermissions(g.Ko)
 
-	g.Turn = oppositeColor(p.Color)
+	g.Turn = OppositeColor(p.Color)
 	g.Passed = false
 
 	return g.Score
@@ -487,11 +522,11 @@ func (g *Game) Pass() {
 		}
 	} else {
 		g.Passed = true
-		g.Turn = oppositeColor(g.Turn)
+		g.Turn = OppositeColor(g.Turn)
 	}
 }
 
 func (g *Game) Resign(color string) {
 	g.Ended = true
-	g.Winner = oppositeColor(color)
+	g.Winner = OppositeColor(color)
 }
