@@ -1,6 +1,6 @@
-// package player
+package player
 
-package main
+// package main
 
 import (
 	"fmt"
@@ -10,61 +10,61 @@ import (
 	"time"
 )
 
-var Game game.Game = game.NewGame(9)
-var color = "black"
+// var Game game.Game = game.NewGame(9)
+// var color = "black"
 
-func main() {
-	setupPoints := []game.Point{
-		{X: 1, Y: 2, Color: "black"},
-		{X: 2, Y: 2, Color: "white"},
-		{X: 7, Y: 4, Color: "black"},
-		{X: 2, Y: 3, Color: "white"},
-		{X: 7, Y: 5, Color: "black"},
-		{X: 0, Y: 2, Color: "white"},
-		{X: 3, Y: 2, Color: "black"},
-		{X: 8, Y: 5, Color: "white"},
-		{X: 0, Y: 2, Color: "black"},
-	}
+// func main() {
+// 	setupPoints := []game.Point{
+// 		{X: 1, Y: 2, Color: "black"},
+// 		{X: 2, Y: 2, Color: "white"},
+// 		{X: 7, Y: 4, Color: "black"},
+// 		{X: 2, Y: 3, Color: "white"},
+// 		{X: 7, Y: 5, Color: "black"},
+// 		{X: 0, Y: 2, Color: "white"},
+// 		{X: 3, Y: 2, Color: "black"},
+// 		{X: 8, Y: 5, Color: "white"},
+// 		{X: 0, Y: 2, Color: "black"},
+// 	}
 
-	for _, p := range setupPoints {
-		if Game.IsValidMove(p) {
-			Game.Play(p)
-		}
-	}
+// 	for _, p := range setupPoints {
+// 		if Game.IsValidMove(p) {
+// 			Game.Play(p)
+// 		}
+// 	}
 
-	newMove := Move(Game, color)
-	fmt.Println(newMove)
-}
+// 	newMove := Move(Game, color)
+// 	fmt.Println(newMove)
+// }
 
-func legalMoves(g game.Game, color string) []game.Point {
-	moves := []game.Point{}
-	Game.Board.ForEachPoint(func(p *game.Point) {
-		if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
-			moves = append(moves, *p)
-		}
-	})
-	return moves
-}
+// func legalMoves(g game.Game, color string) []game.Point {
+// 	moves := []game.Point{}
+// 	Game.Board.ForEachPoint(func(p *game.Point) {
+// 		if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
+// 			moves = append(moves, *p)
+// 		}
+// 	})
+// 	return moves
+// }
 
-func evaluateMoves(g game.Game, color string) [][2]int {
-	moves := [][2]int{}
-	maxScore := math.Inf(-1)
-	Game.Board.ForEachPoint(func(p *game.Point) {
-		if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
-			gameCopy := g.DeepCopy()
-			gameCopy.Play(game.Point{X: p.X, Y: p.Y, Color: color})
-			totalScore := float64(gameCopy.Score[color] - gameCopy.Score[game.OppositeColor(color)])
-			coords := [2]int{p.X, p.Y}
-			if totalScore > maxScore {
-				moves = [][2]int{coords}
-				maxScore = totalScore
-			} else if totalScore == maxScore {
-				moves = append(moves, coords)
-			}
-		}
-	})
-	return moves
-}
+// func evaluateMoves(g game.Game, color string) [][2]int {
+// 	moves := [][2]int{}
+// 	maxScore := math.Inf(-1)
+// 	Game.Board.ForEachPoint(func(p *game.Point) {
+// 		if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
+// 			gameCopy := g.DeepCopy()
+// 			gameCopy.Play(game.Point{X: p.X, Y: p.Y, Color: color})
+// 			totalScore := float64(gameCopy.Score[color] - gameCopy.Score[game.OppositeColor(color)])
+// 			coords := [2]int{p.X, p.Y}
+// 			if totalScore > maxScore {
+// 				moves = [][2]int{coords}
+// 				maxScore = totalScore
+// 			} else if totalScore == maxScore {
+// 				moves = append(moves, coords)
+// 			}
+// 		}
+// 	})
+// 	return moves
+// }
 
 func staticEval(g game.Game, color string) float64 {
 	basicScore := g.Score[color] - g.Score[game.OppositeColor(color)]
@@ -109,7 +109,7 @@ func staticEval(g game.Game, color string) float64 {
 
 // Recursively evaluate possible moves and counter-moves using minimax algorithm
 // returns eval score and slice of moves which result in that score
-func minimax(g game.Game, depth int, maximize bool) (float64, []game.Point) {
+func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool) (float64, []game.Point) {
 	if depth == 0 || g.Ended {
 		var eval float64
 		if maximize {
@@ -136,41 +136,54 @@ func minimax(g game.Game, depth int, maximize bool) (float64, []game.Point) {
 	if maximize {
 		maxEval := math.Inf(-1)
 		moves := []game.Point{}
-		g.Board.ForEachPoint(func(p *game.Point) {
-			if testGame, ok := testPoint(p); ok {
-				eval, _ := minimax(testGame, depth-1, false)
-				if eval > maxEval {
-					diff := eval - maxEval
-					moves = []game.Point{*p}
-					maxEval = eval
-					if depth == 3 {
-						fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, diff, maxEval)
+	OUTERMAX:
+		for _, row := range g.Board.Getpoints() {
+			for _, p := range row {
+				if testGame, ok := testPoint(p); ok {
+					eval, _ := minimax(testGame, depth-1, alpha, beta, false)
+					if eval > maxEval {
+						diff := eval - maxEval
+						moves = []game.Point{*p}
+						maxEval = eval
+						if depth == 3 {
+							fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, diff, maxEval)
+						}
+					} else if eval == maxEval {
+						moves = append(moves, *p)
+						if depth == 3 {
+							fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, eval-maxEval, maxEval)
+						}
 					}
-				} else if eval == maxEval {
-					moves = append(moves, *p)
-					if depth == 3 {
-						fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, eval-maxEval, maxEval)
+					alpha = math.Max(alpha, eval)
+					if beta <= alpha {
+						break OUTERMAX
 					}
 				}
-
 			}
-		})
+		}
 		return maxEval, moves
 
 	} else {
 		minEval := math.Inf(1)
 		moves := []game.Point{}
-		g.Board.ForEachPoint(func(p *game.Point) {
-			if testGame, ok := testPoint(p); ok {
-				eval, _ := minimax(testGame, depth-1, true)
-				if eval < minEval {
-					moves = []game.Point{*p}
-					minEval = eval
-				} else if eval == minEval {
-					moves = append(moves, *p)
+	OUTERMIN:
+		for _, row := range g.Board.Getpoints() {
+			for _, p := range row {
+				if testGame, ok := testPoint(p); ok {
+					eval, _ := minimax(testGame, depth-1, alpha, beta, true)
+					if eval < minEval {
+						moves = []game.Point{*p}
+						minEval = eval
+					} else if eval == minEval {
+						moves = append(moves, *p)
+					}
+					beta = math.Min(alpha, eval)
+					if beta <= alpha {
+						break OUTERMIN
+					}
 				}
 			}
-		})
+		}
 		return minEval, moves
 	}
 }
@@ -190,7 +203,7 @@ func RandomMove(color string, moves []game.Point) game.Point {
 func Move(g game.Game, color string) game.Point {
 	p := game.Point{X: -1, Y: -1, Color: ""}
 
-	eval, moves := minimax(g, 3, true)
+	eval, moves := minimax(g, 4, math.Inf(-1), math.Inf(1), true)
 	fmt.Printf("Eval Score: %v\nNum Equiv Moves: %v\n", eval, len(moves))
 
 	if len(moves) == 0 {

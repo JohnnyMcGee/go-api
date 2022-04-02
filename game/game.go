@@ -55,6 +55,10 @@ func (b GameBoard) size() int {
 	return len(b.points)
 }
 
+func (b GameBoard) Getpoints() [][]*Point {
+	return b.points
+}
+
 func (b GameBoard) Points() [][]Point {
 	boardPoints := make([][]Point, len(b.points), len(b.points))
 	for j, col := range b.points {
