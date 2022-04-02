@@ -14,56 +14,56 @@ import (
 // var color = "black"
 
 // func main() {
-// 	setupPoints := []game.Point{
-// 		{X: 1, Y: 2, Color: "black"},
-// 		{X: 2, Y: 2, Color: "white"},
-// 		{X: 7, Y: 4, Color: "black"},
-// 		{X: 2, Y: 3, Color: "white"},
-// 		{X: 7, Y: 5, Color: "black"},
-// 		{X: 0, Y: 2, Color: "white"},
-// 		{X: 3, Y: 2, Color: "black"},
-// 		{X: 8, Y: 5, Color: "white"},
-// 		{X: 0, Y: 2, Color: "black"},
-// 	}
+// setupPoints := []game.Point{
+// {X: 1, Y: 2, Color: "black"},
+// {X: 2, Y: 2, Color: "white"},
+// {X: 7, Y: 4, Color: "black"},
+// {X: 2, Y: 3, Color: "white"},
+// {X: 7, Y: 5, Color: "black"},
+// {X: 0, Y: 2, Color: "white"},
+// {X: 3, Y: 2, Color: "black"},
+// {X: 8, Y: 5, Color: "white"},
+// {X: 0, Y: 2, Color: "black"},
+// }
 
-// 	for _, p := range setupPoints {
-// 		if Game.IsValidMove(p) {
-// 			Game.Play(p)
-// 		}
-// 	}
+// for _, p := range setupPoints {
+// if Game.IsValidMove(p) {
+// Game.Play(p)
+// }
+// }
 
-// 	newMove := Move(Game, color)
-// 	fmt.Println(newMove)
+// newMove := Move(Game, color)
+// fmt.Println(newMove)
 // }
 
 // func legalMoves(g game.Game, color string) []game.Point {
-// 	moves := []game.Point{}
-// 	Game.Board.ForEachPoint(func(p *game.Point) {
-// 		if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
-// 			moves = append(moves, *p)
-// 		}
-// 	})
-// 	return moves
+// moves := []game.Point{}
+// Game.Board.ForEachPoint(func(p *game.Point) {
+// if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
+// moves = append(moves, *p)
+// }
+// })
+// return moves
 // }
 
 // func evaluateMoves(g game.Game, color string) [][2]int {
-// 	moves := [][2]int{}
-// 	maxScore := math.Inf(-1)
-// 	Game.Board.ForEachPoint(func(p *game.Point) {
-// 		if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
-// 			gameCopy := g.DeepCopy()
-// 			gameCopy.Play(game.Point{X: p.X, Y: p.Y, Color: color})
-// 			totalScore := float64(gameCopy.Score[color] - gameCopy.Score[game.OppositeColor(color)])
-// 			coords := [2]int{p.X, p.Y}
-// 			if totalScore > maxScore {
-// 				moves = [][2]int{coords}
-// 				maxScore = totalScore
-// 			} else if totalScore == maxScore {
-// 				moves = append(moves, coords)
-// 			}
-// 		}
-// 	})
-// 	return moves
+// moves := [][2]int{}
+// maxScore := math.Inf(-1)
+// Game.Board.ForEachPoint(func(p *game.Point) {
+// if g.IsValidMove(game.Point{X: p.X, Y: p.Y, Color: color}) {
+// gameCopy := g.DeepCopy()
+// gameCopy.Play(game.Point{X: p.X, Y: p.Y, Color: color})
+// totalScore := float64(gameCopy.Score[color] - gameCopy.Score[game.OppositeColor(color)])
+// coords := [2]int{p.X, p.Y}
+// if totalScore > maxScore {
+// moves = [][2]int{coords}
+// maxScore = totalScore
+// } else if totalScore == maxScore {
+// moves = append(moves, coords)
+// }
+// }
+// })
+// return moves
 // }
 
 func staticEvalByGroup(g game.Game, color string) float64 {
@@ -77,7 +77,7 @@ func staticEvalByGroup(g game.Game, color string) float64 {
 		yMin := math.Inf(1)
 
 		for _, b := range grp.Bounds {
-			bPoint := g.Board.At(b[0], b[1])
+			bPoint := *g.Board.At(b[0], b[1])
 
 			xMax = math.Max(float64(b[0]), xMax)
 			xMin = math.Min(float64(b[0]), xMin)
@@ -87,31 +87,32 @@ func staticEvalByGroup(g game.Game, color string) float64 {
 			if numEyes < 2 && bPoint.Color == "" {
 				numLiberties++
 				eye := 1
-				for _, p := range g.Board.At(b[0], b[1]).AdjPoints(g.Board) {
+
+				for _, p := range bPoint.AdjPoints(g.Board) {
 					if p.GroupId != grp.ID {
 						eye = 0
 						break
 					}
+					numEyes += eye
 				}
-				numEyes += eye
 			}
-		}
 
-		if numEyes > 1 {
-			score[grp.Color] += 2 // multiple eyes weighted high
-		} else {
-			if numEyes == 1 {
-				score[grp.Color] += 1 // single eye weighted slightly lower
+			if numEyes > 1 {
+				score[grp.Color] += 4 // multiple eyes weighted high
+			} else {
+				if numEyes == 1 {
+					score[grp.Color] += 2 // single eye weighted slightly lower
+				}
+				score[grp.Color] += float64(numLiberties) * .25 // liberties weighted lower than eyes
 			}
-			score[grp.Color] += float64(numLiberties) * .25 // liberties weighted lower than eyes
+
+			area := (xMax - xMin - 1) * (yMax - yMin - 1)
+			score[grp.Color] += area * .5 // area weighted lower than liberties
+
+			size := float64(grp.Size())
+			score[grp.Color] += size * .2 // size weighted lower than area
+
 		}
-
-		area := (xMax - xMin - 1) * (yMax - yMin - 1)
-		score[grp.Color] += area * .2 // area weighted lower than liberties
-
-		size := float64(grp.Size())
-		score[grp.Color] += size * .1 // size weighted lower than area
-
 	}
 
 	return score[color] - score[game.OppositeColor(color)]
@@ -187,7 +188,7 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 	if maximize {
 		maxEval := math.Inf(-1)
 		moves := []game.Point{}
-		evaluate := func(testGame game.Game, p *game.Point) float64 {
+		evaluate := func(testGame game.Game, p *game.Point) {
 			eval, _ := minimax(testGame, depth-1, alpha, beta, false)
 			if eval > maxEval {
 				diff := eval - maxEval
@@ -202,14 +203,18 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 					fmt.Printf("Move: %v, %v, Diff: %v, maxEval: %v\n", p.X, p.Y, eval-maxEval, maxEval)
 				}
 			}
-			return eval
+			alpha = math.Max(alpha, eval)
 		}
+
+		testPass := g.DeepCopy()
+		testPass.Pass()
+		evaluate(testPass, &game.Point{X: -1, Y: -1, Color: ""})
+
 	OUTERMAX:
 		for _, row := range g.Board.Getpoints() {
 			for _, p := range row {
 				if testGame, ok := testPoint(p); ok {
-					eval := evaluate(testGame, p)
-					alpha = math.Max(alpha, eval)
+					evaluate(testGame, p)
 					if beta <= alpha {
 						break OUTERMAX
 					}
