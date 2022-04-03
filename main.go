@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-contrib/cors"
@@ -31,12 +32,15 @@ func main() {
 }
 
 var Game = game.NewGame(9)
+var count = 0
 
 func getPlayerMove(c *gin.Context) {
 	color := c.Param("color")
-	move := player.Move(Game, color)
+	move := player.Move(Game, color, count)
 	if Game.IsValidMove(move) {
 		Game.Play(move)
+		count++
+		fmt.Println(Game.Captures)
 		c.JSON(http.StatusOK, move)
 	} else {
 		Game.Pass()
@@ -60,6 +64,7 @@ func getPass(c *gin.Context) {
 
 func getNewGame(c *gin.Context) {
 	Game = game.NewGame(9)
+	count = 0
 	c.JSON(http.StatusOK, "")
 }
 
@@ -102,6 +107,8 @@ func postMove(c *gin.Context) {
 
 	if Game.IsValidMove(newPoint) {
 		Game.Play(newPoint)
+		count++
+		fmt.Println(Game.Captures)
 		c.IndentedJSON(http.StatusCreated, Game.Board.At(newPoint.X, newPoint.Y))
 	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})

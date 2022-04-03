@@ -71,13 +71,16 @@ var DefaultConfig = EvalConfig{
 	eyeRecursion: 8,
 	eyeWeight:    1,
 	libWeight:    .5,
-	areaWeight:   .14,
-	sizeWeight:   .12,
+	areaWeight:   .4,
+	sizeWeight:   .2,
 }
 
 func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 	score := map[string]float64{"black": 0, "white": 0}
+	numGroupsByColor := map[string]int{"black": 0, "white": 0}
+
 	for _, grp := range g.Board.Groups {
+		numGroupsByColor[grp.Color]++
 		numEyes := 0
 		numLiberties := 0
 		xMax := math.Inf(-1)
@@ -129,7 +132,13 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 		}
 	}
 
-	return score[color] - score[game.OppositeColor(color)]
+	friendlyScore := score[color]
+	enemyScore := score[game.OppositeColor(color)]
+
+	if numGroupsByColor["white"] == 0 || numGroupsByColor["black"] == 0 {
+		return friendlyScore - enemyScore
+	}
+	return (friendlyScore / float64(numGroupsByColor[color])) - (enemyScore / float64(numGroupsByColor[game.OppositeColor(color)]))
 }
 
 // func staticEval(g game.Game, color string) float64 {
@@ -273,10 +282,30 @@ func RandomMove(color string, moves []game.Point) game.Point {
 	}
 }
 
-func Move(g game.Game, color string) game.Point {
+// find the max depth for which, given the number of pieces on the board (coverage)
+// would yield fewer options than maxComplexity
+func maximumDepth(coverage int, maxComplexity int) int {
+	depth := 1
+	options := 81 - coverage
+	for {
+		next := options * (81 - coverage - depth)
+		if next >= maxComplexity {
+			break
+		}
+		depth++
+		options = next
+	}
+	return depth
+}
+
+func Move(g game.Game, color string, coverage int) game.Point {
 	p := game.Point{X: -1, Y: -1, Color: ""}
 
-	eval, moves := minimax(g, 4, math.Inf(-1), math.Inf(1), true)
+	depth := maximumDepth(coverage, 8e7)
+
+	fmt.Printf("Coverage: %v\nPossible Moves: %v\nDepth: %v\n", coverage, 81-coverage, depth)
+
+	eval, moves := minimax(g, depth, math.Inf(-1), math.Inf(1), true)
 	fmt.Printf("Eval Score: %v\nNum Equiv Moves: %v\n", eval, len(moves))
 
 	if len(moves) == 0 {
