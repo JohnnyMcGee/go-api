@@ -4,13 +4,13 @@ import (
 	"github.com/rs/xid"
 )
 
-// TODO: implement user settings (board size, scoring style, and?)
+// TODO: implement user settings (board Size, scoring style, and?)
 // TODO: implement multiple concurrent games, multiple online players, AI single player mode
-func NewGameBoard(size int) GameBoard {
-	gbPoints := make([][]*Point, size, size)
-	for y := 0; y < size; y++ {
-		col := make([]*Point, size, size)
-		for x := 0; x < size; x++ {
+func NewGameBoard(Size int) GameBoard {
+	gbPoints := make([][]*Point, Size, Size)
+	for y := 0; y < Size; y++ {
+		col := make([]*Point, Size, Size)
+		for x := 0; x < Size; x++ {
 			p := Point{Color: "", GroupId: "", X: x, Y: y, Permit: map[string]bool{"black": true, "white": true}}
 			col[x] = &p
 		}
@@ -23,9 +23,9 @@ func NewGameBoard(size int) GameBoard {
 }
 
 func (b GameBoard) DeepCopy() GameBoard {
-	bPointsCopy := make([][]*Point, b.size(), b.size())
+	bPointsCopy := make([][]*Point, b.Size(), b.Size())
 	for i := range bPointsCopy {
-		bPointsCopy[i] = make([]*Point, b.size(), b.size())
+		bPointsCopy[i] = make([]*Point, b.Size(), b.Size())
 	}
 	b.ForEachPoint(func(p *Point) {
 		pCopy := (*p).DeepCopy()
@@ -51,7 +51,7 @@ func (b GameBoard) At(x, y int) *Point {
 	return b.points[y][x]
 }
 
-func (b GameBoard) size() int {
+func (b GameBoard) Size() int {
 	return len(b.points)
 }
 
@@ -370,11 +370,11 @@ func (p Point) AdjPoints(board GameBoard) []Point {
 		AdjPoints = append(AdjPoints, *board.At(p.X, p.Y-1))
 	}
 	// right
-	if p.X < board.size()-1 {
+	if p.X < board.Size()-1 {
 		AdjPoints = append(AdjPoints, *board.At(p.X+1, p.Y))
 	}
 	// bottom
-	if p.Y < board.size()-1 {
+	if p.Y < board.Size()-1 {
 		AdjPoints = append(AdjPoints, *board.At(p.X, p.Y+1))
 	}
 	// left
@@ -502,7 +502,7 @@ func (g Game) DeepCopy() Game {
 }
 
 func (g *Game) IsValidMove(p Point) bool {
-	inRangeXY := p.X < g.Board.size() && p.X >= 0 && p.Y < g.Board.size() && p.Y >= 0
+	inRangeXY := p.X < g.Board.Size() && p.X >= 0 && p.Y < g.Board.Size() && p.Y >= 0
 	validColor := p.Color == g.Turn
 	if !g.Ended && inRangeXY && validColor {
 		return g.Board.At(p.X, p.Y).Permit[p.Color]

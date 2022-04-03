@@ -35,48 +35,76 @@ import (
 // newMove := Move(Game, color)
 // fmt.Println(newMove)
 // }
+type scanContext struct {
+	game            game.Game
+	point           game.Point
+	group           game.Group
+	scanned         []game.Point
+	depth           int
+	connectionDepth float64
+}
 
-// recursively check if point is part of an area enclosed by a given group
-func isAnEye(g game.Game, p game.Point, grp game.Group, checked []game.Point, depth int) ([]game.Point, bool) {
-	// verify that this point was not part of a prior 'isAnyEye' search
-	for _, checkedPoint := range checked {
-		if checkedPoint.X == p.X && checkedPoint.Y == p.Y {
-			checked = append(checked, p)
-			return checked, true
+// recursively explore surrounding points
+//  check for eyes (enclosed areas within group)
+// and distance to groups of same color (potential connections)
+func proximityScan(c scanContext) (scannedPoints []game.Point, isAnEye bool, connDepth float64) {
+	// verify this point was not scanned previously
+	for _, scannedPoint := range c.scanned {
+		if scannedPoint.X == c.point.X && scannedPoint.Y == c.point.Y {
+			c.scanned = append(c.scanned, c.point)
+			return c.scanned, true, c.connectionDepth
 		}
 	}
-	// search around the point to see if it is enclosed on all sides
-	for _, adjP := range p.AdjPoints(g.Board) {
-		if adjP.GroupId != grp.ID {
-			if depth == 0 || adjP.Color != "" {
-				return checked, false
+	// search the neighboring points for friends and enemies
+	for _, adjP := range c.point.AdjPoints(c.game.Board) {
+		if adjP.GroupId != c.group.ID {
+			if adjP.Color == c.group.Color {
+				c.connectionDepth = math.Max(c.connectionDepth, float64(c.depth))
 			}
-			checked = append(checked, p)
-			return isAnEye(g, adjP, grp, checked, depth-1)
+			if c.depth == 0 && adjP.Color != "" {
+				return c.scanned, false, c.connectionDepth
+			}
+			c.scanned = append(c.scanned, c.point)
+			return proximityScan(scanContext{
+				game:            c.game,
+				point:           adjP,
+				group:           c.group,
+				scanned:         c.scanned,
+				depth:           c.depth - 1,
+				connectionDepth: c.connectionDepth,
+			})
 		}
 	}
-	checked = append(checked, p)
-	return checked, true
+	c.scanned = append(c.scanned, c.point)
+	return c.scanned, true, c.connectionDepth
 }
 
 type EvalConfig struct {
-	eyeRecursion  int
-	eyeWeight     float64
-	libWeight     float64
-	areaWeight    float64
-	sizeWeight    float64
-	captureWeight float64
-	koWeight      float64
+	complexity      int
+	eyeRecursion    int
+	eyeWeight       float64
+	libWeight       float64
+	areaWeight      float64
+	sizeWeight      float64
+	captureWeight   float64
+	koWeight        float64
+	densityWeight   float64
+	connDepthWeight float64
+	groupAvgWeight  float64
 }
 
 var DefaultConfig = EvalConfig{
-	eyeRecursion:  8,
-	eyeWeight:     .8,
-	libWeight:     .25,
-	areaWeight:    .4,
-	sizeWeight:    .15,
-	captureWeight: .8,
-	koWeight:      .1,
+	complexity:      6e7,
+	eyeRecursion:    8,
+	eyeWeight:       1,
+	libWeight:       .1,
+	areaWeight:      .5,
+	sizeWeight:      .1,
+	captureWeight:   1.2,
+	koWeight:        .1,
+	densityWeight:   0.3,
+	connDepthWeight: .6,
+	groupAvgWeight:  .05,
 }
 
 func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
@@ -92,7 +120,9 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 		yMax := math.Inf(-1)
 		yMin := math.Inf(1)
 
-		checkedPoints := []game.Point{}
+		ScannedPoints := []game.Point{}
+
+		ConnectionDepth := math.Inf(-1)
 
 		for _, b := range grp.Bounds {
 			bPoint := *g.Board.At(b[0], b[1])
@@ -105,22 +135,30 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 			if numEyes < 2 && bPoint.Color == "" {
 				numLiberties++
 				// verify that this point was not part of a prior 'isAnyEye' search
-				var isInCheckedPoints bool
-				for _, cp := range checkedPoints {
-					isInCheckedPoints = cp.X == bPoint.X && cp.Y == bPoint.Y
+				var isInScannedPoints bool
+				for _, cp := range ScannedPoints {
+					isInScannedPoints = cp.X == bPoint.X && cp.Y == bPoint.Y
 				}
 				// search area around the point to see if it is fully enclosed (is an eye)
-				eye := false
-				if !isInCheckedPoints {
-					checkedPoints, eye = isAnEye(g, bPoint, *grp, checkedPoints, config.eyeRecursion)
+				Eye := false
+				if !isInScannedPoints {
+					scannedPoints, eye, connectionDepth := proximityScan(scanContext{
+						game:            g,
+						point:           bPoint,
+						group:           *grp,
+						scanned:         ScannedPoints,
+						depth:           config.eyeRecursion,
+						connectionDepth: ConnectionDepth,
+					})
+					ScannedPoints, Eye, ConnectionDepth = scannedPoints, eye, math.Max(ConnectionDepth, connectionDepth)
 				}
-				if eye {
+				if Eye {
 					numEyes++
 				}
 			}
 
 			if numEyes > 1 {
-				score[grp.Color] += 4 * config.eyeWeight // multiple eyes weighted high
+				score[grp.Color] += 6 * config.eyeWeight // multiple eyes weighted high
 			} else {
 				if numEyes == 1 {
 					score[grp.Color] += 2 * config.eyeWeight // single eye weighted slightly lower
@@ -128,11 +166,20 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 				score[grp.Color] += float64(numLiberties) * config.libWeight // liberties weighted lower than eyes
 			}
 
-			area := (xMax - xMin - 1) * (yMax - yMin - 1)
+			area := (xMax - xMin) * (yMax - yMin)
 			score[grp.Color] += area * config.areaWeight // area weighted lower than liberties
 
 			size := float64(grp.Size())
 			score[grp.Color] += size * config.sizeWeight // size weighted lower than area
+
+			if area > 0 {
+				score[grp.Color] += (size / area) * 100 * config.densityWeight
+			}
+
+			if !math.IsInf(ConnectionDepth, -1) {
+				score[grp.Color] += ConnectionDepth * config.connDepthWeight
+			}
+
 		}
 	}
 
@@ -144,56 +191,17 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 		koScore = -100 * config.koWeight
 	}
 
-	// if groupCount["white"] == 0 || groupCount["black"] == 0 {
+	if groupCount["white"] > 0 && groupCount["black"] > 0 {
+		score[color] += (score[color] / float64(groupCount[color])) * config.groupAvgWeight
+		score[oppColor] += (score[oppColor] / float64(groupCount[oppColor])) * config.groupAvgWeight
+	}
+
 	return score[color] - score[oppColor] + captureScore*config.captureWeight + koScore
-	// }
-	// return (score[color] / float64(groupCount[color])) - (score[oppColor] / float64(groupCount[oppColor])) + totalCaptures*config.captureWeight
 }
-
-// func staticEval(g game.Game, color string) float64 {
-// basicScore := g.Score[color] - g.Score[game.OppositeColor(color)]
-// groupScore := 0.0
-
-// eyeScore := func(grp game.Group) int {
-// score := 0
-// for _, b := range grp.Bounds {
-// numEyes := 0
-// if g.Board.At(b[0], b[1]).IsAnEye(g.Board) {
-// numEyes++
-// }
-// if numEyes > 0 {
-// score += 1
-// }
-// if numEyes > 1 {
-// score += 3
-// }
-// }
-// return score
-// }
-
-// libsPerColor := map[string]float64{"white": 0, "black": 0}
-// groupsPerColor := map[string]float64{"white": 0, "black": 0}
-// for _, grp := range g.Board.Groups {
-// if grp.Color == color {
-// libsPerColor[color] += float64(grp.CountLiberties(g.Board))
-// groupsPerColor[color]++
-// groupScore += float64(eyeScore(*grp))
-
-// } else if grp.Color == game.OppositeColor(color) {
-// libsPerColor[game.OppositeColor(color)] += float64(grp.CountLiberties(g.Board))
-// groupsPerColor[game.OppositeColor(color)]++
-// groupScore -= float64(eyeScore(*grp))
-// }
-// }
-// groupScore += ((groupsPerColor[color]) / libsPerColor[color])
-// groupScore -= (groupsPerColor[game.OppositeColor(color)] / libsPerColor[game.OppositeColor(color)])
-
-// return float64(basicScore) + groupScore
-// }
 
 // Recursively evaluate possible moves and counter-moves using minimax algorithm
 // returns eval score and slice of moves which result in that score
-func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool) (float64, []game.Point) {
+func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool, noPass bool) (float64, []game.Point) {
 	if depth == 0 || g.Ended {
 		var eval float64
 		if maximize {
@@ -221,7 +229,7 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 		maxEval := math.Inf(-1)
 		moves := []game.Point{}
 		evaluate := func(testGame game.Game, p *game.Point) {
-			eval, _ := minimax(testGame, depth-1, alpha, beta, false)
+			eval, _ := minimax(testGame, depth-1, alpha, beta, false, noPass)
 			if eval > maxEval {
 				moves = []game.Point{*p}
 				maxEval = eval
@@ -232,9 +240,11 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 			alpha = math.Max(alpha, eval)
 		}
 
-		testPass := g.DeepCopy()
-		testPass.Pass()
-		evaluate(testPass, &game.Point{X: -1, Y: -1, Color: ""})
+		if !noPass {
+			testPass := g.DeepCopy()
+			testPass.Pass()
+			evaluate(testPass, &game.Point{X: -1, Y: -1, Color: ""})
+		}
 
 	OUTERMAX:
 		for _, row := range g.Board.Getpoints() {
@@ -254,7 +264,7 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool)
 		moves := []game.Point{}
 
 		evaluate := func(testGame game.Game, p *game.Point) float64 {
-			eval, _ := minimax(testGame, depth-1, alpha, beta, true)
+			eval, _ := minimax(testGame, depth-1, alpha, beta, true, noPass)
 			if eval < minEval {
 				moves = []game.Point{*p}
 				minEval = eval
@@ -310,11 +320,14 @@ func maximumDepth(coverage int, maxComplexity int) int {
 func Move(g game.Game, color string, coverage int) game.Point {
 	p := game.Point{X: -1, Y: -1, Color: ""}
 
-	depth := maximumDepth(coverage, 8e7)
+	depth := maximumDepth(coverage, DefaultConfig.complexity)
 
 	fmt.Printf("Coverage: %v\nPossible Moves: %v\nDepth: %v\n", coverage, 81-coverage, depth)
 
-	eval, moves := minimax(g, depth, math.Inf(-1), math.Inf(1), true)
+	// Player will not pass if <75% of board is covered
+	noPass := (float64(coverage) / math.Pow(float64(g.Board.Size()), 2)) < .75
+
+	eval, moves := minimax(g, depth, math.Inf(-1), math.Inf(1), true, noPass)
 	fmt.Printf("Eval Score: %v\nNum Equiv Moves: %v\n", eval, len(moves))
 
 	if len(moves) == 0 {
