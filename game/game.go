@@ -496,6 +496,8 @@ func (g Game) DeepCopy() Game {
 	for k, v := range g.Score {
 		scoreCopy[k] = v
 	}
+	g.Captures = capturesCopy
+	g.Score = scoreCopy
 	return g
 }
 
