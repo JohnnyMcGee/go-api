@@ -60,27 +60,31 @@ func isAnEye(g game.Game, p game.Point, grp game.Group, checked []game.Point, de
 }
 
 type EvalConfig struct {
-	eyeRecursion int
-	eyeWeight    float64
-	libWeight    float64
-	areaWeight   float64
-	sizeWeight   float64
+	eyeRecursion  int
+	eyeWeight     float64
+	libWeight     float64
+	areaWeight    float64
+	sizeWeight    float64
+	captureWeight float64
+	koWeight      float64
 }
 
 var DefaultConfig = EvalConfig{
-	eyeRecursion: 8,
-	eyeWeight:    1,
-	libWeight:    .5,
-	areaWeight:   .4,
-	sizeWeight:   .2,
+	eyeRecursion:  8,
+	eyeWeight:     .8,
+	libWeight:     .25,
+	areaWeight:    .4,
+	sizeWeight:    .15,
+	captureWeight: .8,
+	koWeight:      .1,
 }
 
 func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 	score := map[string]float64{"black": 0, "white": 0}
-	numGroupsByColor := map[string]int{"black": 0, "white": 0}
+	groupCount := map[string]int{"black": 0, "white": 0}
 
 	for _, grp := range g.Board.Groups {
-		numGroupsByColor[grp.Color]++
+		groupCount[grp.Color]++
 		numEyes := 0
 		numLiberties := 0
 		xMax := math.Inf(-1)
@@ -132,13 +136,18 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 		}
 	}
 
-	friendlyScore := score[color]
-	enemyScore := score[game.OppositeColor(color)]
+	oppColor := game.OppositeColor(color)
+	captureScore := float64(g.Captures[oppColor]-g.Captures[color]) * 100
 
-	if numGroupsByColor["white"] == 0 || numGroupsByColor["black"] == 0 {
-		return friendlyScore - enemyScore
+	var koScore float64 = 0
+	if g.Ko != [2]int{-1, -1} {
+		koScore = -100 * config.koWeight
 	}
-	return (friendlyScore / float64(numGroupsByColor[color])) - (enemyScore / float64(numGroupsByColor[game.OppositeColor(color)]))
+
+	// if groupCount["white"] == 0 || groupCount["black"] == 0 {
+	return score[color] - score[oppColor] + captureScore*config.captureWeight + koScore
+	// }
+	// return (score[color] / float64(groupCount[color])) - (score[oppColor] / float64(groupCount[oppColor])) + totalCaptures*config.captureWeight
 }
 
 // func staticEval(g game.Game, color string) float64 {

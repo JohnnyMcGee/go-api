@@ -36,7 +36,8 @@ var count = 0
 
 func getPlayerMove(c *gin.Context) {
 	color := c.Param("color")
-	move := player.Move(Game, color, count)
+	coverage := count - Game.Captures["white"] - Game.Captures["black"]
+	move := player.Move(Game, color, coverage)
 	if Game.IsValidMove(move) {
 		Game.Play(move)
 		count++
