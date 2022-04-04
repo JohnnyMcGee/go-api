@@ -7,15 +7,21 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
+	"go-api/db"
 	"go-api/game"
 	"go-api/player"
 )
+
+const connStr = "postgresql://<username>:<password>@<database_ip>/todos?sslmode=disable"
+
+var DB, _ = db.ConnectDB(connStr)
 
 func main() {
 	router := gin.Default()
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:3000"}
 	router.Use(cors.New(config))
+	router.GET("/db", getDB)
 	router.GET("/board", getBoard)
 	router.GET("/groups", getGroups)
 	router.GET("/captures", getCaptures)
@@ -34,6 +40,10 @@ func main() {
 
 var Game = game.NewGame(9)
 var count = 0
+
+func getDB(c *gin.Context) {
+	db.GetHandler(c, DB)
+}
 
 func getPlayerMove(c *gin.Context) {
 	color := c.Param("color")
