@@ -27,6 +27,7 @@ func main() {
 	router.GET("/pass", getPass)
 	router.GET("/resign", getResign)
 	router.GET("/player-move/:color", getPlayerMove)
+	router.GET("/random-move/:color", getRandomMove)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
@@ -42,6 +43,19 @@ func getPlayerMove(c *gin.Context) {
 		Game.Play(move)
 		count++
 		fmt.Println(Game.Captures)
+		c.JSON(http.StatusOK, move)
+	} else {
+		Game.Pass()
+		c.JSON(http.StatusOK, "pass")
+	}
+}
+
+func getRandomMove(c *gin.Context) {
+	color := c.Param("color")
+	move := player.RandomMove(Game, color)
+	if Game.IsValidMove(move) {
+		Game.Play(move)
+		count++
 		c.JSON(http.StatusOK, move)
 	} else {
 		Game.Pass()

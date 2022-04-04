@@ -94,16 +94,16 @@ type EvalConfig struct {
 }
 
 var DefaultConfig = EvalConfig{
-	complexity:      6e7,
+	complexity:      5e7,
 	eyeRecursion:    8,
-	eyeWeight:       .6,
+	eyeWeight:       .75,
 	libertyWeight:   .5,
 	areaWeight:      .33,
 	sizeWeight:      .05,
-	captureWeight:   .5,
-	koWeight:        .5,
-	densityWeight:   .5,
-	connDepthWeight: .6,
+	captureWeight:   .65,
+	koWeight:        .3,
+	densityWeight:   .45,
+	connDepthWeight: .7,
 	groupAvgWeight:  .05,
 }
 
@@ -312,10 +312,12 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool,
 	}
 }
 
-func PlayRandomMove(g game.Game, color string) game.Point {
+func RandomMove(g game.Game, color string) game.Point {
 	s1 := rand.NewSource(time.Now().UnixNano())
 	r1 := rand.New(s1)
-	for {
+	tries := 0
+	for tries < 99 {
+		tries++
 		p := game.Point{
 			X:     r1.Int() % g.Board.Size(),
 			Y:     r1.Int() % g.Board.Size(),
@@ -325,6 +327,7 @@ func PlayRandomMove(g game.Game, color string) game.Point {
 			return p
 		}
 	}
+	return game.Point{X: -1, Y: -1, Color: ""}
 }
 
 type UniqueRand struct {
@@ -358,7 +361,7 @@ func (u *UniqueRand) Coord() [2]int {
 }
 
 // pick a random move from list of moves
-func RandomMove(color string, moves []game.Point) game.Point {
+func SelectMove(color string, moves []game.Point) game.Point {
 	s := rand.NewSource(time.Now().UnixNano())
 	r := rand.New(s)
 	n := r.Intn(len(moves))
@@ -402,5 +405,5 @@ func Move(g game.Game, color string, coverage int) game.Point {
 		return p
 	}
 
-	return RandomMove(color, moves)
+	return SelectMove(color, moves)
 }
