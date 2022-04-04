@@ -45,7 +45,7 @@ type scanContext struct {
 }
 
 // recursively explore surrounding points
-//  check for eyes (enclosed areas within group)
+// check for eyes (enclosed areas within group)
 // and distance to groups of same color (potential connections)
 func proximityScan(c scanContext) (scannedPoints []game.Point, isAnEye bool, connDepth float64) {
 	// verify this point was not scanned previously
@@ -83,7 +83,7 @@ type EvalConfig struct {
 	complexity      int
 	eyeRecursion    int
 	eyeWeight       float64
-	libWeight       float64
+	libertyWeight   float64
 	areaWeight      float64
 	sizeWeight      float64
 	captureWeight   float64
@@ -96,13 +96,13 @@ type EvalConfig struct {
 var DefaultConfig = EvalConfig{
 	complexity:      6e7,
 	eyeRecursion:    8,
-	eyeWeight:       1,
-	libWeight:       .1,
-	areaWeight:      .5,
-	sizeWeight:      .1,
-	captureWeight:   1.2,
-	koWeight:        .1,
-	densityWeight:   0.3,
+	eyeWeight:       .6,
+	libertyWeight:   .5,
+	areaWeight:      .33,
+	sizeWeight:      .05,
+	captureWeight:   .5,
+	koWeight:        .5,
+	densityWeight:   .5,
 	connDepthWeight: .6,
 	groupAvgWeight:  .05,
 }
@@ -113,6 +113,7 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 
 	for _, grp := range g.Board.Groups {
 		groupCount[grp.Color]++
+
 		numEyes := 0
 		numLiberties := 0
 		xMax := math.Inf(-1)
@@ -121,7 +122,6 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 		yMin := math.Inf(1)
 
 		ScannedPoints := []game.Point{}
-
 		ConnectionDepth := math.Inf(-1)
 
 		for _, b := range grp.Bounds {
@@ -139,7 +139,7 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 				for _, cp := range ScannedPoints {
 					isInScannedPoints = cp.X == bPoint.X && cp.Y == bPoint.Y
 				}
-				// search area around the point to see if it is fully enclosed (is an eye)
+				// scan area around the point for eyes or potential connections
 				Eye := false
 				if !isInScannedPoints {
 					scannedPoints, eye, connectionDepth := proximityScan(scanContext{
@@ -157,43 +157,58 @@ func staticEvalByGroup(g game.Game, color string, config EvalConfig) float64 {
 				}
 			}
 
-			if numEyes > 1 {
-				score[grp.Color] += 6 * config.eyeWeight // multiple eyes weighted high
-			} else {
-				if numEyes == 1 {
-					score[grp.Color] += 2 * config.eyeWeight // single eye weighted slightly lower
-				}
-				score[grp.Color] += float64(numLiberties) * config.libWeight // liberties weighted lower than eyes
-			}
-
+			//// DIMENSIONS OF GROUP
+			// AREA
 			area := (xMax - xMin) * (yMax - yMin)
-			score[grp.Color] += area * config.areaWeight // area weighted lower than liberties
+			score[grp.Color] += area * 0.5 * config.areaWeight // area weighted lower than liberties
 
+			// SIZE
 			size := float64(grp.Size())
 			score[grp.Color] += size * config.sizeWeight // size weighted lower than area
 
+			// DENSITY
 			if area > 0 {
 				score[grp.Color] += (size / area) * 100 * config.densityWeight
 			}
 
+			//// SUSCEPTIBILITY TO CAPTURE
+			// NUMBER OF EYES
+			if numEyes > 1 {
+				score[grp.Color] += area * 0.5 * config.eyeWeight // two eyes are better than one
+			} else if numEyes == 1 {
+				score[grp.Color] += area * 0.2 * config.eyeWeight
+			}
+
+			// NUMBER OF LIBERTIES
+			if numEyes < 2 {
+				score[grp.Color] += float64(numLiberties) * 0.5 * config.libertyWeight
+			}
+
+			// PROXIMITY TO FRIENDLY GROUPS (CONNECTION DEPTH)
 			if !math.IsInf(ConnectionDepth, -1) {
-				score[grp.Color] += ConnectionDepth * config.connDepthWeight
+				score[grp.Color] += ConnectionDepth * area * 0.1 * config.connDepthWeight
 			}
 
 		}
 	}
 
 	oppColor := game.OppositeColor(color)
-	captureScore := float64(g.Captures[oppColor]-g.Captures[color]) * 100
 
-	var koScore float64 = 0
-	if g.Ko != [2]int{-1, -1} {
-		koScore = -100 * config.koWeight
+	// AVERAGE GROUP VALUE
+	if groupCount["white"] > 0 && groupCount["black"] > 0 {
+		score[color] += (score[color] / float64(groupCount[color])) * 0.2 * config.groupAvgWeight
+		score[oppColor] += (score[oppColor] / float64(groupCount[oppColor])) * 0.2 * config.groupAvgWeight
 	}
 
-	if groupCount["white"] > 0 && groupCount["black"] > 0 {
-		score[color] += (score[color] / float64(groupCount[color])) * config.groupAvgWeight
-		score[oppColor] += (score[oppColor] / float64(groupCount[oppColor])) * config.groupAvgWeight
+	// RESULTING CAPTURES
+	// evaluated as proportion of total score
+	// it will maintain significance even as group size & number increase
+	captureScore := float64(g.Captures[oppColor]-g.Captures[color]) * 0.25 * (score["white"] + score["black"])
+
+	// DOES MOVE START A KO FIGHT?
+	var koScore float64 = 0
+	if g.Ko != [2]int{-1, -1} {
+		koScore = -0.1 * (score["white"] + score["black"]) * config.koWeight
 	}
 
 	return score[color] - score[oppColor] + captureScore*config.captureWeight + koScore
@@ -246,14 +261,18 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool,
 			evaluate(testPass, &game.Point{X: -1, Y: -1, Color: ""})
 		}
 
-	OUTERMAX:
-		for _, row := range g.Board.Getpoints() {
-			for _, p := range row {
-				if testGame, ok := testPoint(p); ok {
-					evaluate(testGame, p)
-					if beta <= alpha {
-						break OUTERMAX
-					}
+		rng := NewUniqueRand(g.Board.Size())
+		for {
+			coord := rng.Coord()
+			if coord[0] < 0 {
+				break
+			}
+			p := g.Board.At(coord[0], coord[1])
+
+			if testGame, ok := testPoint(p); ok {
+				evaluate(testGame, p)
+				if beta <= alpha {
+					break
 				}
 			}
 		}
@@ -273,19 +292,68 @@ func minimax(g game.Game, depth int, alpha float64, beta float64, maximize bool,
 			}
 			return eval
 		}
-	OUTERMIN:
-		for _, row := range g.Board.Getpoints() {
-			for _, p := range row {
-				if testGame, ok := testPoint(p); ok {
-					eval := evaluate(testGame, p)
-					beta = math.Min(alpha, eval)
-					if beta <= alpha {
-						break OUTERMIN
-					}
+		rng := NewUniqueRand(g.Board.Size())
+
+		for {
+			coord := rng.Coord()
+			if coord[0] < 0 {
+				break
+			}
+			p := g.Board.At(coord[0], coord[1])
+			if testGame, ok := testPoint(p); ok {
+				eval := evaluate(testGame, p)
+				beta = math.Min(alpha, eval)
+				if beta <= alpha {
+					break
 				}
 			}
 		}
 		return minEval, moves
+	}
+}
+
+func PlayRandomMove(g game.Game, color string) game.Point {
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+	for {
+		p := game.Point{
+			X:     r1.Int() % g.Board.Size(),
+			Y:     r1.Int() % g.Board.Size(),
+			Color: color,
+		}
+		if g.IsValidMove(p) {
+			return p
+		}
+	}
+}
+
+type UniqueRand struct {
+	generated map[[2]int]bool //keeps track of
+	rng       *rand.Rand      //underlying random number generator
+	scope     int             //scope of number to be generated
+}
+
+func NewUniqueRand(size int) *UniqueRand {
+	s1 := rand.NewSource(time.Now().UnixNano())
+	r1 := rand.New(s1)
+	return &UniqueRand{
+		generated: make(map[[2]int]bool),
+		rng:       r1,
+		scope:     size,
+	}
+}
+
+func (u *UniqueRand) Coord() [2]int {
+	if u.scope > 0 && len(u.generated) >= u.scope*u.scope {
+		return [2]int{-1, -1}
+	}
+	for {
+		var x int = u.rng.Int() % u.scope
+		var y int = u.rng.Int() % u.scope
+		if !u.generated[[2]int{x, y}] {
+			u.generated[[2]int{x, y}] = true
+			return [2]int{x, y}
+		}
 	}
 }
 
