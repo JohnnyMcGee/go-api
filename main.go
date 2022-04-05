@@ -7,12 +7,13 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
+	"go-api/config"
 	"go-api/db"
 	"go-api/game"
 	"go-api/player"
 )
 
-const connStr = "postgresql://<username>:<password>@<database_ip>/todos?sslmode=disable"
+var connStr = fmt.Sprintf("postgresql://%v:%v@%v/GO-db?sslmode=disable", config.Username, config.Password, config.Address)
 
 var DB, _ = db.ConnectDB(connStr)
 
@@ -22,6 +23,7 @@ func main() {
 	config.AllowOrigins = []string{"http://localhost:3000"}
 	router.Use(cors.New(config))
 	router.GET("/db", getDB)
+	router.POST("/db", postDB)
 	router.GET("/board", getBoard)
 	router.GET("/groups", getGroups)
 	router.GET("/captures", getCaptures)
@@ -45,6 +47,10 @@ func getDB(c *gin.Context) {
 	db.GetHandler(c, DB)
 }
 
+func postDB(c *gin.Context) {
+	db.PostHandler(c, DB)
+}
+
 func getPlayerMove(c *gin.Context) {
 	color := c.Param("color")
 	coverage := count - Game.Captures["white"] - Game.Captures["black"]
@@ -52,12 +58,13 @@ func getPlayerMove(c *gin.Context) {
 	if Game.IsValidMove(move) {
 		Game.Play(move)
 		count++
-		fmt.Println(Game.Captures)
 		c.JSON(http.StatusOK, move)
 	} else {
 		Game.Pass()
 		c.JSON(http.StatusOK, "pass")
+
 	}
+	db.CreateBoard(&Game.Board, DB)
 }
 
 func getRandomMove(c *gin.Context) {
@@ -71,6 +78,8 @@ func getRandomMove(c *gin.Context) {
 		Game.Pass()
 		c.JSON(http.StatusOK, "pass")
 	}
+	db.CreateBoard(&Game.Board, DB)
+
 }
 
 func getResign(c *gin.Context) {
@@ -85,12 +94,16 @@ func getPass(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, Game.Turn)
 	}
+	db.CreateBoard(&Game.Board, DB)
+
 }
 
 func getNewGame(c *gin.Context) {
 	Game = game.NewGame(9)
 	count = 0
 	c.JSON(http.StatusOK, "")
+	db.CreateBoard(&Game.Board, DB)
+
 }
 
 // simplify gameboard before sending to client
@@ -135,6 +148,7 @@ func postMove(c *gin.Context) {
 		count++
 		fmt.Println(Game.Captures)
 		c.IndentedJSON(http.StatusCreated, Game.Board.At(newPoint.X, newPoint.Y))
+		db.CreateBoard(&Game.Board, DB)
 	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 	}
