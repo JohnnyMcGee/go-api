@@ -18,6 +18,7 @@ var connStr = fmt.Sprintf("postgresql://%v:%v@%v/GO-db?sslmode=disable", config.
 var DB, _ = db.ConnectDB(connStr)
 
 func main() {
+	db.CreateGame(&Game, DB)
 	router := gin.Default()
 	config := cors.DefaultConfig()
 	config.AllowOrigins = []string{"http://localhost:3000"}
@@ -62,9 +63,10 @@ func getPlayerMove(c *gin.Context) {
 	} else {
 		Game.Pass()
 		c.JSON(http.StatusOK, "pass")
-
 	}
 	db.CreateBoard(&Game.Board, DB)
+	fmt.Println("updating game...")
+	db.UpdateGame(&Game, DB)
 }
 
 func getRandomMove(c *gin.Context) {
@@ -79,12 +81,13 @@ func getRandomMove(c *gin.Context) {
 		c.JSON(http.StatusOK, "pass")
 	}
 	db.CreateBoard(&Game.Board, DB)
-
+	db.UpdateGame(&Game, DB)
 }
 
 func getResign(c *gin.Context) {
 	Game.Resign(Game.Turn)
 	c.JSON(http.StatusOK, "Game Over")
+	db.UpdateGame(&Game, DB)
 }
 
 func getPass(c *gin.Context) {
@@ -95,15 +98,16 @@ func getPass(c *gin.Context) {
 		c.JSON(http.StatusOK, Game.Turn)
 	}
 	db.CreateBoard(&Game.Board, DB)
-
+	db.UpdateGame(&Game, DB)
 }
 
 func getNewGame(c *gin.Context) {
 	Game = game.NewGame(9)
 	count = 0
 	c.JSON(http.StatusOK, "")
+	db.CreateGame(&Game, DB)
+	fmt.Println(Game)
 	db.CreateBoard(&Game.Board, DB)
-
 }
 
 // simplify gameboard before sending to client
@@ -149,6 +153,7 @@ func postMove(c *gin.Context) {
 		fmt.Println(Game.Captures)
 		c.IndentedJSON(http.StatusCreated, Game.Board.At(newPoint.X, newPoint.Y))
 		db.CreateBoard(&Game.Board, DB)
+		db.UpdateGame(&Game, DB)
 	} else {
 		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 	}

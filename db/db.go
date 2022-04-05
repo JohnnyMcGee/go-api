@@ -18,27 +18,27 @@ import (
 // var connStr = fmt.Sprintf("postgresql://%v:%v@%v/GO-db?sslmode=disable", config.Username, config.Password, config.Address)
 
 // func main() {
-// 	Game := game.NewGame(9)
-// 	setupPoints := []game.Point{
-// 		{X: 1, Y: 2, Color: "black"},
-// 		{X: 2, Y: 2, Color: "white"},
-// 		{X: 7, Y: 4, Color: "black"},
-// 		{X: 2, Y: 3, Color: "white"},
-// 		{X: 7, Y: 5, Color: "black"},
-// 		{X: 0, Y: 2, Color: "white"},
-// 		{X: 3, Y: 2, Color: "black"},
-// 		{X: 8, Y: 5, Color: "white"},
-// 		{X: 0, Y: 2, Color: "black"},
-// 	}
+// Game := game.NewGame(9)
+// setupPoints := []game.Point{
+// {X: 1, Y: 2, Color: "black"},
+// {X: 2, Y: 2, Color: "white"},
+// {X: 7, Y: 4, Color: "black"},
+// {X: 2, Y: 3, Color: "white"},
+// {X: 7, Y: 5, Color: "black"},
+// {X: 0, Y: 2, Color: "white"},
+// {X: 3, Y: 2, Color: "black"},
+// {X: 8, Y: 5, Color: "white"},
+// {X: 0, Y: 2, Color: "black"},
+// }
 
-// 	for _, p := range setupPoints {
-// 		if Game.IsValidMove(p) {
-// 			Game.Play(p)
-// 		}
-// 	}
+// for _, p := range setupPoints {
+// if Game.IsValidMove(p) {
+// Game.Play(p)
+// }
+// }
 
-// 	db, _ := ConnectDB(connStr)
-// 	CreateBoard(&Game.Board, db)
+// db, _ := ConnectDB(connStr)
+// CreateBoard(&Game.Board, db)
 // }
 
 func ConnectDB(connStr string) (*sql.DB, error) {
@@ -68,6 +68,43 @@ func CreateBoard(board *game.GameBoard, db *sql.DB) {
 	fmt.Println(valueStr)
 	q := fmt.Sprintf("INSERT INTO board %v VALUES %v", columnStr, valueStr)
 	db.Query(q)
+}
+
+func CreateGame(g *game.Game, db *sql.DB) int64 {
+	var id int64
+	q := fmt.Sprintf(`
+		INSERT INTO game (whitescore, blackscore, turn, ended, winner, whitecaptures, blackcaptures, kox, koy, passed)
+		VALUES (%v, %v, '%v', %v, '', %v, %v, %v, %v, %v) RETURNING id;`,
+		g.Score["white"], g.Score["black"], g.Turn, g.Ended, g.Captures["white"], g.Captures["black"], g.Ko[0], g.Ko[1], g.Passed)
+	fmt.Println(q)
+	err := db.QueryRow(q).Scan(&id)
+	if err != nil {
+		fmt.Println("Exec err:", err.Error())
+		return -1
+	}
+	fmt.Println(id)
+	g.ID = id
+	return id
+}
+
+func UpdateGame(g *game.Game, db *sql.DB) {
+	winner := ""
+	if g.Ended {
+		winner = g.Winner
+	}
+
+	q := fmt.Sprintf(`
+	UPDATE game 
+	SET whitescore = %v, blackscore = %v, turn = '%v', ended = %v, winner = '%v', whitecaptures = %v, blackcaptures = %v, kox = %v, koy = %v, passed = %v 
+	WHERE id = %v
+	`,
+		g.Score["white"], g.Score["black"], g.Turn, g.Ended, winner, g.Captures["white"], g.Captures["black"], g.Ko[0], g.Ko[1], g.Passed, g.ID)
+
+	_, err := db.Exec(q)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
 }
 
 func GetHandler(c *gin.Context, db *sql.DB) {
