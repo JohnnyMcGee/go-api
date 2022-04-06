@@ -43,6 +43,7 @@ func (b GameBoard) DeepCopy() GameBoard {
 }
 
 type GameBoard struct {
+	ID     int
 	points [][]*Point
 	Groups map[string]*Group
 }
@@ -463,7 +464,7 @@ func OppositeColor(color string) string {
 }
 
 type Game struct {
-	ID       int64          `json:"id"`
+	ID       int            `json:"id"`
 	Board    GameBoard      `json:"board"`
 	Captures map[string]int `json:"captures"`
 	Score    map[string]int `json:"score"`

@@ -6,11 +6,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"net/http"
+	"time"
 
 	_ "github.com/lib/pq"
-
-	"github.com/gin-gonic/gin"
 
 	"go-api/game"
 )
@@ -49,42 +47,18 @@ func ConnectDB(connStr string) (*sql.DB, error) {
 	return db, err
 }
 
-type Score struct {
-	Black int `json:"black"`
-	White int `json:"white"`
-}
-
-func CreateBoard(board *game.GameBoard, db *sql.DB) {
-	columnStr := "("
-	valueStr := "("
-	board.ForEachPoint(func(p *game.Point) {
-		columnStr += fmt.Sprintf("\"%v,%v\", ", p.X, p.Y)
-		valueStr += fmt.Sprintf("'%v', ", p.Color)
-	})
-	columnStr = columnStr[:len(columnStr)-2] + ")"
-	valueStr = valueStr[:len(valueStr)-2] + ")"
-
-	fmt.Println(columnStr)
-	fmt.Println(valueStr)
-	q := fmt.Sprintf("INSERT INTO board %v VALUES %v", columnStr, valueStr)
-	db.Query(q)
-}
-
-func CreateGame(g *game.Game, db *sql.DB) int64 {
-	var id int64
+func CreateGame(g *game.Game, db *sql.DB) {
+	var id int
 	q := fmt.Sprintf(`
 		INSERT INTO game (whitescore, blackscore, turn, ended, winner, whitecaptures, blackcaptures, kox, koy, passed)
 		VALUES (%v, %v, '%v', %v, '', %v, %v, %v, %v, %v) RETURNING id;`,
 		g.Score["white"], g.Score["black"], g.Turn, g.Ended, g.Captures["white"], g.Captures["black"], g.Ko[0], g.Ko[1], g.Passed)
-	fmt.Println(q)
 	err := db.QueryRow(q).Scan(&id)
 	if err != nil {
 		fmt.Println("Exec err:", err.Error())
-		return -1
 	}
-	fmt.Println(id)
 	g.ID = id
-	return id
+	CreateBoard(&g.Board, db)
 }
 
 func UpdateGame(g *game.Game, db *sql.DB) {
@@ -107,38 +81,71 @@ func UpdateGame(g *game.Game, db *sql.DB) {
 
 }
 
-func GetHandler(c *gin.Context, db *sql.DB) {
-	var res Score
-	var scores []Score
+func CreateBoard(board *game.GameBoard, db *sql.DB) {
+	columnStr := "("
+	valueStr := "("
+	board.ForEachPoint(func(p *game.Point) {
+		columnStr += fmt.Sprintf("\"%v,%v\", ", p.X, p.Y)
+		valueStr += fmt.Sprintf("'%v', ", p.Color)
+	})
+	columnStr = columnStr[:len(columnStr)-2] + ")"
+	valueStr = valueStr[:len(valueStr)-2] + ")"
 
-	rows, err := db.Query("SELECT * FROM scores")
-	defer rows.Close()
+	var id int
+
+	q := fmt.Sprintf("INSERT INTO board %v VALUES %v RETURNING id;", columnStr, valueStr)
+	err := db.QueryRow(q).Scan(&id)
 	if err != nil {
-		log.Fatalln(err)
-		c.JSON(http.StatusInternalServerError, "An error occured")
+		fmt.Println(err.Error())
 	}
-
-	for rows.Next() {
-		rows.Scan(&res.Black, &res.White)
-		scores = append(scores, res)
-	}
-
-	c.JSON(http.StatusOK, scores)
+	board.ID = id
 }
 
-func PostHandler(c *gin.Context, db *sql.DB) {
-	newScore := Score{}
-
-	if err := c.BindJSON(&newScore); err != nil {
-		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "invalid JSON data"})
-		return
+func CreateMove(g *game.Game, p *game.Point, db *sql.DB) {
+	q := fmt.Sprintf(`
+		INSERT INTO move (ScoreWhite, ScoreBlack, Turn, CapturesWhite, CapturesBlack, KoX, KoY, Passed, GameID, BoardID, X, Y, Datetime)
+		VALUES (%v, %v, '%v', %v, %v, %v, %v, %v, %v, %v, %v, %v, '%v');`,
+		g.Score["white"], g.Score["black"], g.Turn, g.Captures["white"], g.Captures["black"], g.Ko[0], g.Ko[1], g.Passed, g.ID, g.Board.ID, p.X, p.Y, time.Now().Format("2006-01-02 15:04:05"))
+	_, err := db.Query(q)
+	if err != nil {
+		fmt.Println(err.Error())
 	}
-	fmt.Printf("%v\n", newScore)
-
-	if newScore.Black >= 0 && newScore.White >= 0 {
-		_, err := db.Exec("INSERT INTO scores (black, white) VALUES ($1, $2)", newScore.Black, newScore.White)
-		if err != nil {
-			log.Fatalf("An error occured while executing query: %v", err)
-		}
-	}
+	CreateBoard(&g.Board, db)
+	UpdateGame(g, db)
 }
+
+// func GetHandler(c *gin.Context, db *sql.DB) {
+// 	var res Score
+// 	var scores []Score
+
+// 	rows, err := db.Query("SELECT * FROM scores")
+// 	defer rows.Close()
+// 	if err != nil {
+// 		log.Fatalln(err)
+// 		c.JSON(http.StatusInternalServerError, "An error occured")
+// 	}
+
+// 	for rows.Next() {
+// 		rows.Scan(&res.Black, &res.White)
+// 		scores = append(scores, res)
+// 	}
+
+// 	c.JSON(http.StatusOK, scores)
+// }
+
+// func PostHandler(c *gin.Context, db *sql.DB) {
+// 	newScore := Score{}
+
+// 	if err := c.BindJSON(&newScore); err != nil {
+// 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "invalid JSON data"})
+// 		return
+// 	}
+// 	fmt.Printf("%v\n", newScore)
+
+// 	if newScore.Black >= 0 && newScore.White >= 0 {
+// 		_, err := db.Exec("INSERT INTO scores (black, white) VALUES ($1, $2)", newScore.Black, newScore.White)
+// 		if err != nil {
+// 			log.Fatalf("An error occured while executing query: %v", err)
+// 		}
+// 	}
+// }

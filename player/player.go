@@ -388,8 +388,12 @@ func maximumDepth(coverage int, maxComplexity int) int {
 	return depth
 }
 
-func Move(g game.Game, color string, coverage int) game.Point {
+func Move(g game.Game, color string) game.Point {
 	p := game.Point{X: -1, Y: -1, Color: ""}
+	coverage := -g.Captures["white"] - g.Captures["black"]
+	for _, grp := range g.Board.Groups {
+		coverage += grp.Size()
+	}
 
 	depth := maximumDepth(coverage, DefaultConfig.complexity)
 
