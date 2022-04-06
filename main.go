@@ -47,61 +47,57 @@ func handleNewGame(size int) game.Game {
 	return Game
 }
 
-func handleMove(c *gin.Context, p *game.Point) bool {
+func handleMove(c *gin.Context, p *game.Point) {
 	if Game.IsValidMove(*p) {
+		db.CreateMove(&Game, p, DB)
 		Game.Play(*p)
-	} else if p.X == -1 {
+		db.UpdateGame(&Game, DB)
+		c.JSON(http.StatusOK, *Game.Board.At(p.X, p.Y))
+
+	} else if p.X == -1 || p.Y == -1 {
 		getPass(c)
 	} else {
-		return false
+		c.JSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 	}
-	db.CreateMove(&Game, p, DB)
-	return true
 }
 
 func getPlayerMove(c *gin.Context) {
 	color := c.Param("color")
 	move := player.Move(Game, color)
 	handleMove(c, &move)
-	c.JSON(http.StatusOK, *Game.Board.At(move.X, move.Y))
 }
 
 func getRandomMove(c *gin.Context) {
 	color := c.Param("color")
 	move := player.RandomMove(Game, color)
 	handleMove(c, &move)
-	c.JSON(http.StatusOK, *Game.Board.At(move.X, move.Y))
 }
 
 func getResign(c *gin.Context) {
+	db.CreateMove(&Game, &game.Point{X: -1, Y: -1, Color: ""}, DB)
 	Game.Resign(Game.Turn)
 	c.JSON(http.StatusOK, "Game Over")
-	db.CreateMove(&Game, &game.Point{X: -1, Y: -1, Color: ""}, DB)
+	db.UpdateGame(&Game, DB)
 }
 
 func getPass(c *gin.Context) {
+	db.CreateMove(&Game, &game.Point{X: -1, Y: -1, Color: ""}, DB)
 	Game.Pass()
+	db.UpdateGame(&Game, DB)
 	if Game.Ended {
 		c.JSON(http.StatusOK, "Game Over")
 	} else {
 		c.JSON(http.StatusOK, Game.Turn)
 	}
-	db.CreateMove(&Game, &game.Point{X: -1, Y: -1, Color: ""}, DB)
 }
 
 func postMove(c *gin.Context) {
 	var newPoint game.Point
-
 	if err := c.BindJSON(&newPoint); err != nil {
 		c.IndentedJSON(http.StatusBadRequest, gin.H{"message": "invalid JSON data"})
 		return
 	}
-
-	if valid := handleMove(c, &newPoint); valid {
-		c.IndentedJSON(http.StatusOK, Game.Board.At(newPoint.X, newPoint.Y))
-	} else {
-		c.IndentedJSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
-	}
+	handleMove(c, &newPoint)
 }
 
 func getNewGame(c *gin.Context) {
