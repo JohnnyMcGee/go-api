@@ -72,7 +72,6 @@ func TrainNetPlayer(c *gin.Context) {
 }
 
 func NetPlayerMove(c *gin.Context) {
-	fmt.Println("Cowabunga")
 	p := netplayer.BestPossibleMove(Game, net)
 	handleMove(c, &p)
 }

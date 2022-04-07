@@ -43,26 +43,35 @@ type Move struct {
 	GameId        int
 }
 
+type result struct {
+	scorewhite float64
+	scoreblack float64
+	capwhite   float64
+	capblack   float64
+}
+
 func GetTrainingData(db *sql.DB) ([][]float64, []float64) {
 	input := [][]float64{}
 	target := []float64{}
 
 	var gameid int
-	var winner string
-	rows, err := db.Query(`SELECT id, winner FROM game WHERE winner = 'white' OR winner = 'black'`)
+
+	var res result
+
+	rows, err := db.Query(`SELECT id, whitescore, blackscore, whitecaptures, blackcaptures FROM game WHERE winner = 'white' OR winner = 'black'`)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
 	for rows.Next() {
-		rows.Scan(&gameid, &winner)
-		inp, tgt := GetEncodedMoves(gameid, winner, db)
+		rows.Scan(&gameid, &res.scorewhite, &res.scoreblack, &res.capwhite, &res.capblack)
+		inp, tgt := GetEncodedMoves(gameid, res, db)
 		input = append(input, inp...)
 		target = append(target, tgt...)
 	}
 	return input, target
 }
 
-func GetEncodedMoves(GameID int, winner string, db *sql.DB) ([][]float64, []float64) {
+func GetEncodedMoves(GameID int, res result, db *sql.DB) ([][]float64, []float64) {
 	var moves []Move
 	rows, err := db.Query(fmt.Sprintf(`
 	SELECT turn, passed, kox, koy, scorewhite, scoreblack, captureswhite, capturesblack, x, y, id, boardid, gameid
@@ -99,11 +108,13 @@ func GetEncodedMoves(GameID int, winner string, db *sql.DB) ([][]float64, []floa
 		in = append(in, boards[i]...)
 		input[i] = in
 
-		if move.Turn == winner {
-			target[i] = 1
-		} else {
-			target[i] = 0
+		var e float64
+		if move.Turn == "black" {
+			e = res.scoreblack + res.capwhite - res.scorewhite - res.capblack
+		} else if move.Turn == "white" {
+			e = res.scorewhite + res.capblack - res.scoreblack - res.capwhite
 		}
+		target = append(target, e/162)
 	}
 	return input, target
 }
