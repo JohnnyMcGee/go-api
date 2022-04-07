@@ -43,21 +43,29 @@ func NewNetPlayer(DB *sql.DB) *deep.Neural {
 }
 
 func TrainNet(n *deep.Neural, data *training.Examples) {
-	// params: learning rate, momentum, alpha decay, nesterov
-	optimizer := training.NewSGD(0.05, 0.1, 1e-6, true)
-	// params: optimizer, verbosity (print stats at every 50th iteration)
-	trainer := training.NewTrainer(optimizer, 50)
+	// // params: learning rate, momentum, alpha decay, nesterov
+	// optimizer := training.NewSGD(0.05, 0.1, 1e-6, true)
+	// // params: optimizer, verbosity (print stats at every 50th iteration)
+	// trainer := training.NewTrainer(optimizer, 50)
 
-	training, heldout := data.Split(0.5)
+	// training, heldout := data.Split(0.5)
+	// trainer.Train(n, training, heldout, 1000) // training, validation, iterations
+
+	optimizer := training.NewAdam(0.001, 0.9, 0.999, 1e-8)
+	// params: optimizer, verbosity (print info at every n:th iteration), batch-size, number of workers
+	trainer := training.NewBatchTrainer(optimizer, 50, 500, 4)
+
+	training, heldout := data.Split(0.75)
 	trainer.Train(n, training, heldout, 1000) // training, validation, iterations
+
 }
 
 func NewNet(inputs int) *deep.Neural {
 	n := deep.NewNeural(&deep.Config{
 		/* Input dimensionality */
 		Inputs: inputs,
-		/* Two hidden layers consisting of two neurons each, and a single output */
-		Layout: []int{2, 100, 1},
+		/* 9 hidden layers consisting of 9 neurons each, and a single output */
+		Layout: []int{3, 9, 1},
 		/* Activation functions: Sigmoid, Tanh, ReLU, Linear */
 		Activation: deep.ActivationSigmoid,
 		/* Determines output layer activation & loss function:
