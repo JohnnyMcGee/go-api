@@ -347,18 +347,38 @@ func NewUniqueRand(size int) *UniqueRand {
 }
 
 func (u *UniqueRand) Coord() [2]int {
-	if u.scope > 0 && len(u.generated) >= u.scope*u.scope {
+	if u.scope > 0 && len(u.generated) >= u.scope*u.scope+1 {
 		return [2]int{-1, -1}
 	}
+	ind := [][2]int{}
+	for x := 0; x < u.scope; x++ {
+		for y := 0; y < u.scope; y++ {
+			ind = append(ind, [2]int{x, y})
+		}
+	}
+	ind = append(ind, [2]int{-1, -1})
 	for {
-		var x int = u.rng.Int() % u.scope
-		var y int = u.rng.Int() % u.scope
-		if !u.generated[[2]int{x, y}] {
-			u.generated[[2]int{x, y}] = true
-			return [2]int{x, y}
+		c := ind[u.rng.Int()%len(ind)]
+		if !u.generated[c] {
+			u.generated[c] = true
+			return c
 		}
 	}
 }
+
+// func (u *UniqueRand) Coord() [2]int {
+// 	if u.scope > 0 && len(u.generated) >= u.scope*u.scope {
+// 		return [2]int{-1, -1}
+// 	}
+// 	for {
+// 		var x int = u.rng.Int() % u.scope
+// 		var y int = u.rng.Int() % u.scope
+// 		if !u.generated[[2]int{x, y}] {
+// 			u.generated[[2]int{x, y}] = true
+// 			return [2]int{x, y}
+// 		}
+// 	}
+// }
 
 // pick a random move from list of moves
 func SelectMove(color string, moves []game.Point) game.Point {

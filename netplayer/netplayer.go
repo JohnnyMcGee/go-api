@@ -78,6 +78,15 @@ func NewNet(inputs int) *deep.Neural {
 func BestPossibleMove(g game.Game, n *deep.Neural) game.Point {
 	maxEval := math.Inf(-1)
 	bestMove := game.Point{X: -1, Y: -1, Color: g.Turn}
+	// b, w := g.Score["black"], g.Score["white"]
+
+	// consider passing unless the game just started
+	// if b > 10 && w > 10 && b+w > 60 {
+	// 	maxEval = n.Predict(EncodeGame(&g, &bestMove))[0]
+	// } else {
+	// 	maxEval = math.Inf(-1)
+	// }
+
 	rng := player.NewUniqueRand(g.Board.Size())
 	for {
 		coord := rng.Coord()

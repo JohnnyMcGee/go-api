@@ -47,14 +47,15 @@ func GetTrainingData(db *sql.DB) ([][]float64, []float64) {
 	input := [][]float64{}
 	target := []float64{}
 
+	var gameid int
 	var winner string
-	rows, err := db.Query(`SELECT winner FROM game WHERE winner = 'white' OR winner = 'black'`)
+	rows, err := db.Query(`SELECT id, winner FROM game WHERE winner = 'white' OR winner = 'black'`)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
 	for rows.Next() {
-		rows.Scan(&winner)
-		inp, tgt := GetEncodedMoves(38, winner, db)
+		rows.Scan(&gameid, &winner)
+		inp, tgt := GetEncodedMoves(gameid, winner, db)
 		input = append(input, inp...)
 		target = append(target, tgt...)
 	}
@@ -63,11 +64,11 @@ func GetTrainingData(db *sql.DB) ([][]float64, []float64) {
 
 func GetEncodedMoves(GameID int, winner string, db *sql.DB) ([][]float64, []float64) {
 	var moves []Move
-	rows, err := db.Query(`
+	rows, err := db.Query(fmt.Sprintf(`
 	SELECT turn, passed, kox, koy, scorewhite, scoreblack, captureswhite, capturesblack, x, y, id, boardid, gameid
 	FROM move
-	WHERE gameid=38;
-	`)
+	WHERE gameid=%v;
+	`, GameID))
 
 	if err != nil {
 		fmt.Println(err.Error())
@@ -81,7 +82,7 @@ func GetEncodedMoves(GameID int, winner string, db *sql.DB) ([][]float64, []floa
 
 	var boards [][]float64
 
-	rows, err = db.Query(`SELECT board.* FROM "move" INNER JOIN board ON move.boardid = board.id WHERE move.gameid =38;`)
+	rows, err = db.Query(fmt.Sprintf(`SELECT board.* FROM "move" INNER JOIN board ON move.boardid = board.id WHERE move.gameid = %v;`, GameID))
 
 	for rows.Next() {
 		input := BoardFromRow(rows)

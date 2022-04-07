@@ -39,6 +39,7 @@ func main() {
 	router.GET("/player-move/:color", getPlayerMove)
 	router.GET("/random-move/:color", getRandomMove)
 	router.GET("/netplayer-move", NetPlayerMove)
+	router.GET("/train-netplayer", TrainNetPlayer)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
@@ -63,6 +64,11 @@ func handleMove(c *gin.Context, p *game.Point) {
 	} else {
 		c.JSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 	}
+}
+
+func TrainNetPlayer(c *gin.Context) {
+	net = netplayer.NewNetPlayer(DB)
+	c.JSON(http.StatusOK, "Net Player Retrained")
 }
 
 func NetPlayerMove(c *gin.Context) {
