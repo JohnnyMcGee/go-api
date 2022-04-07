@@ -10,12 +10,15 @@ import (
 	"go-api/config"
 	"go-api/db"
 	"go-api/game"
+	"go-api/netplayer"
 	"go-api/player"
 )
 
 var connStr = fmt.Sprintf("postgresql://%v:%v@%v/GO-db?sslmode=disable", config.Username, config.Password, config.Address)
 
 var DB, _ = db.ConnectDB(connStr)
+
+var net = netplayer.NewNetPlayer(DB)
 
 func main() {
 	Game = handleNewGame(9)
@@ -35,6 +38,7 @@ func main() {
 	router.GET("/resign", getResign)
 	router.GET("/player-move/:color", getPlayerMove)
 	router.GET("/random-move/:color", getRandomMove)
+	router.GET("/netplayer-move", NetPlayerMove)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
@@ -59,6 +63,12 @@ func handleMove(c *gin.Context, p *game.Point) {
 	} else {
 		c.JSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 	}
+}
+
+func NetPlayerMove(c *gin.Context) {
+	fmt.Println("Cowabunga")
+	p := netplayer.BestPossibleMove(Game, net)
+	handleMove(c, &p)
 }
 
 func getPlayerMove(c *gin.Context) {

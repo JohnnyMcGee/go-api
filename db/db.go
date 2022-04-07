@@ -28,19 +28,19 @@ import (
 // }
 
 type Move struct {
-	turn          string
-	passed        bool
-	kox           int
-	koy           int
-	scorewhite    float64
-	scoreblack    float64
-	captureswhite float64
-	capturesblack float64
-	x             int
-	y             int
-	id            int
-	boardid       int
-	gameid        int
+	Turn          string
+	Passed        bool
+	Kox           int
+	Koy           int
+	ScoreWhite    float64
+	ScoreBlack    float64
+	CapturesWhite float64
+	CapturesBlack float64
+	X             int
+	Y             int
+	ID            int
+	BoardId       int
+	GameId        int
 }
 
 func GetTrainingData(db *sql.DB) ([][]float64, []float64) {
@@ -48,7 +48,7 @@ func GetTrainingData(db *sql.DB) ([][]float64, []float64) {
 	target := []float64{}
 
 	var winner string
-	rows, err := db.Query(`SELECT winner FROM game WHERE winner IS NOT NULL`)
+	rows, err := db.Query(`SELECT winner FROM game WHERE winner = 'white' OR winner = 'black'`)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -75,7 +75,7 @@ func GetEncodedMoves(GameID int, winner string, db *sql.DB) ([][]float64, []floa
 
 	for rows.Next() {
 		var move Move
-		rows.Scan(&move.turn, &move.passed, &move.kox, &move.koy, &move.scorewhite, &move.scoreblack, &move.captureswhite, &move.capturesblack, &move.x, &move.y, &move.id, &move.boardid, &move.gameid)
+		rows.Scan(&move.Turn, &move.Passed, &move.Kox, &move.Koy, &move.ScoreWhite, &move.ScoreBlack, &move.CapturesWhite, &move.CapturesBlack, &move.X, &move.Y, &move.ID, &move.BoardId, &move.GameId)
 		moves = append(moves, move)
 	}
 
@@ -98,7 +98,7 @@ func GetEncodedMoves(GameID int, winner string, db *sql.DB) ([][]float64, []floa
 		in = append(in, boards[i]...)
 		input[i] = in
 
-		if move.turn == winner {
+		if move.Turn == winner {
 			target[i] = 1
 		} else {
 			target[i] = 0
@@ -133,17 +133,24 @@ func BoardFromRow(rows *sql.Rows) []float64 {
 		val := columnPointers[i].(*interface{})
 		// m[colName] = *val
 		if colName != "id" {
-			if fmt.Sprintf("%v", *val) == "white" {
-				input = append(input, 1)
-			} else {
-				input = append(input, 0)
-			}
-			if fmt.Sprintf("%v", *val) == "black" {
-				input = append(input, 1)
-			} else {
-				input = append(input, 0)
-			}
+			input = append(input, EncodePoint(val)...)
 		}
+	}
+	return input
+}
+
+// Takes a point color (string) returns slice []{isWhite, isBlack}
+func EncodePoint(point *interface{}) []float64 {
+	input := make([]float64, 2, 2)
+	if fmt.Sprintf("%v", *point) == "white" {
+		input = append(input, 1)
+	} else {
+		input = append(input, 0)
+	}
+	if fmt.Sprintf("%v", *point) == "black" {
+		input = append(input, 1)
+	} else {
+		input = append(input, 0)
 	}
 	return input
 }
@@ -151,42 +158,42 @@ func BoardFromRow(rows *sql.Rows) []float64 {
 func EncodeMove(move Move) []float64 {
 	input := []float64{}
 
-	if move.turn == "white" {
+	if move.Turn == "white" {
 		input = append(input, 1)
 	} else {
 		input = append(input, 0)
 	}
-	if move.passed {
+	if move.Passed {
 		input = append(input, 1)
 	} else {
 		input = append(input, 0)
 	}
 	kox := make([]float64, 10, 10)
-	if move.kox == -1 {
+	if move.Kox == -1 {
 		kox[9] = 1
 	} else {
-		kox[move.kox] = 1
+		kox[move.Kox] = 1
 	}
 	input = append(input, kox...)
 	koy := make([]float64, 9, 9)
-	if move.koy >= 0 {
-		koy[move.koy] = 1
+	if move.Koy >= 0 {
+		koy[move.Koy] = 1
 	}
-	input = append(input, move.scorewhite/81)
-	input = append(input, move.scoreblack/81)
-	input = append(input, move.capturesblack/81)
-	input = append(input, move.captureswhite/81)
+	input = append(input, move.ScoreWhite/81)
+	input = append(input, move.ScoreBlack/81)
+	input = append(input, move.CapturesBlack/81)
+	input = append(input, move.CapturesWhite/81)
 
 	x := make([]float64, 10, 10)
-	if move.x == -1 {
+	if move.X == -1 {
 		x[9] = 1
 	} else {
-		x[move.x] = 1
+		x[move.X] = 1
 	}
 	input = append(input, x...)
 	y := make([]float64, 9, 9)
-	if move.y >= 0 {
-		y[move.y] = 1
+	if move.Y >= 0 {
+		y[move.Y] = 1
 	}
 	input = append(input, y...)
 	return input

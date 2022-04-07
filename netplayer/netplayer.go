@@ -1,38 +1,61 @@
-package main
+// package main
 
-// package netplayer
+package netplayer
+
 import (
+	"database/sql"
 	"fmt"
+	"math"
 
 	deep "github.com/patrikeh/go-deep"
 	"github.com/patrikeh/go-deep/training"
 
-	"go-api/config"
 	"go-api/db"
+	"go-api/game"
+	"go-api/player"
 )
 
-var data = training.Examples{}
+// var connStr = fmt.Sprintf("postgresql://%v:%v@%v/GO-db?sslmode=disable", config.Username, config.Password, config.Address)
 
-var connStr = fmt.Sprintf("postgresql://%v:%v@%v/GO-db?sslmode=disable", config.Username, config.Password, config.Address)
+// func main() {
 
-func main() {
+// 	DB, err := db.ConnectDB(connStr)
+// 	if err != nil {
+// 		fmt.Println(err.Error())
+// 	}
 
-	DB, err := db.ConnectDB(connStr)
-	if err != nil {
-		fmt.Println(err.Error())
-	}
+// 	net := NewNetPlayer(DB)
+
+// 	fmt.Println(data[0].Input, "=>", net.Predict(data[0].Input))
+// 	fmt.Println(data[5].Input, "=>", net.Predict(data[5].Input))
+// }
+
+func NewNetPlayer(DB *sql.DB) *deep.Neural {
 	input, response := db.GetTrainingData(DB)
+	data := training.Examples{}
 	for i := range input {
 		ex := training.Example{Input: input[i], Response: []float64{response[i]}}
 		data = append(data, ex)
 	}
+	n := NewNet(len(input[0]))
+	TrainNet(n, &data)
+	return n
+}
 
-	fmt.Println(response[0])
-	fmt.Println(response[5])
+func TrainNet(n *deep.Neural, data *training.Examples) {
+	// params: learning rate, momentum, alpha decay, nesterov
+	optimizer := training.NewSGD(0.05, 0.1, 1e-6, true)
+	// params: optimizer, verbosity (print stats at every 50th iteration)
+	trainer := training.NewTrainer(optimizer, 50)
 
+	training, heldout := data.Split(0.5)
+	trainer.Train(n, training, heldout, 1000) // training, validation, iterations
+}
+
+func NewNet(inputs int) *deep.Neural {
 	n := deep.NewNeural(&deep.Config{
 		/* Input dimensionality */
-		Inputs: len(input[0]),
+		Inputs: inputs,
 		/* Two hidden layers consisting of two neurons each, and a single output */
 		Layout: []int{2, 100, 1},
 		/* Activation functions: Sigmoid, Tanh, ReLU, Linear */
@@ -49,15 +72,64 @@ func main() {
 		Bias: true,
 	})
 
-	// params: learning rate, momentum, alpha decay, nesterov
-	optimizer := training.NewSGD(0.05, 0.1, 1e-6, true)
-	// params: optimizer, verbosity (print stats at every 50th iteration)
-	trainer := training.NewTrainer(optimizer, 50)
+	return n
+}
 
-	training, heldout := data.Split(0.5)
-	trainer.Train(n, training, heldout, 1000) // training, validation, iterations
+func BestPossibleMove(g game.Game, n *deep.Neural) game.Point {
+	maxEval := math.Inf(-1)
+	bestMove := game.Point{X: -1, Y: -1, Color: g.Turn}
+	rng := player.NewUniqueRand(g.Board.Size())
+	for {
+		coord := rng.Coord()
+		if coord[0] < 0 {
+			break
+		}
+		p := g.Board.At(coord[0], coord[1])
+		p = &game.Point{X: p.X, Y: p.Y, Color: g.Turn}
 
-	fmt.Println(data[0].Input, "=>", n.Predict(data[0].Input))
-	fmt.Println(data[5].Input, "=>", n.Predict(data[5].Input))
+		if g.IsValidMove(*p) {
+			encodedMove := EncodeGame(&g, p)
+			eval := n.Predict(encodedMove)
+			if eval[0] > maxEval {
+				maxEval = eval[0]
+				bestMove = *p
+			}
+		}
+	}
+	return bestMove
+}
 
+func EncodeGame(g *game.Game, p *game.Point) []float64 {
+	var board []float64
+	g.Board.ForEachPoint(func(p *game.Point) {
+		input := make([]float64, 2, 2)
+		if fmt.Sprintf("%v", *p) == "white" {
+			input = append(input, 1)
+		} else {
+			input = append(input, 0)
+		}
+		if fmt.Sprintf("%v", *p) == "black" {
+			input = append(input, 1)
+		} else {
+			input = append(input, 0)
+		}
+		board = append(board, input...)
+	})
+
+	move := db.Move{
+		Turn:          g.Turn,
+		Passed:        g.Passed,
+		Kox:           g.Ko[0],
+		Koy:           g.Ko[1],
+		ScoreWhite:    float64(g.Score["white"]),
+		ScoreBlack:    float64(g.Score["black"]),
+		CapturesWhite: float64(g.Captures["white"]),
+		CapturesBlack: float64(g.Captures["white"]),
+		X:             p.X,
+		Y:             p.Y,
+	}
+
+	encodedGameState := db.EncodeMove(move)
+	encodedGameState = append(encodedGameState, board...)
+	return encodedGameState
 }
