@@ -1,24 +1,14 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 
-	"go-api/config"
-	"go-api/db"
 	"go-api/game"
-	"go-api/netplayer"
 	"go-api/player"
 )
-
-var connStr = fmt.Sprintf("postgresql://%v:%v@%v/GO-db?sslmode=disable", config.Username, config.Password, config.Address)
-
-var DB, _ = db.ConnectDB(connStr)
-
-var net = netplayer.NewNetPlayer(DB)
 
 func main() {
 	Game = handleNewGame(9)
@@ -38,8 +28,6 @@ func main() {
 	router.GET("/resign", getResign)
 	router.GET("/player-move/:color", getPlayerMove)
 	router.GET("/random-move/:color", getRandomMove)
-	router.GET("/netplayer-move", NetPlayerMove)
-	router.GET("/train-netplayer", TrainNetPlayer)
 	router.POST("/moves", postMove)
 	router.Run("localhost:8080")
 }
@@ -48,15 +36,12 @@ var Game game.Game
 
 func handleNewGame(size int) game.Game {
 	Game = game.NewGame(9)
-	db.CreateGame(&Game, DB)
 	return Game
 }
 
 func handleMove(c *gin.Context, p *game.Point) {
 	if Game.IsValidMove(*p) {
-		db.CreateMove(&Game, p, DB)
 		Game.Play(*p)
-		db.UpdateGame(&Game, DB)
 		c.JSON(http.StatusOK, *Game.Board.At(p.X, p.Y))
 
 	} else if p.X == -1 || p.Y == -1 {
@@ -64,16 +49,6 @@ func handleMove(c *gin.Context, p *game.Point) {
 	} else {
 		c.JSON(400, gin.H{"status": "Bad Request", "message": "move data invalid"})
 	}
-}
-
-func TrainNetPlayer(c *gin.Context) {
-	net = netplayer.NewNetPlayer(DB)
-	c.JSON(http.StatusOK, "Net Player Retrained")
-}
-
-func NetPlayerMove(c *gin.Context) {
-	p := netplayer.BestPossibleMove(Game, net)
-	handleMove(c, &p)
 }
 
 func getPlayerMove(c *gin.Context) {
@@ -89,16 +64,12 @@ func getRandomMove(c *gin.Context) {
 }
 
 func getResign(c *gin.Context) {
-	db.CreateMove(&Game, &game.Point{X: -1, Y: -1, Color: ""}, DB)
 	Game.Resign(Game.Turn)
 	c.JSON(http.StatusOK, "Game Over")
-	db.UpdateGame(&Game, DB)
 }
 
 func getPass(c *gin.Context) {
-	db.CreateMove(&Game, &game.Point{X: -1, Y: -1, Color: ""}, DB)
 	Game.Pass()
-	db.UpdateGame(&Game, DB)
 	if Game.Ended {
 		c.JSON(http.StatusOK, "Game Over")
 	} else {

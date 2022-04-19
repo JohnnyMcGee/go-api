@@ -1,7 +1,5 @@
 package player
 
-// package main
-
 import (
 	"fmt"
 	"go-api/game"
@@ -10,31 +8,6 @@ import (
 	"time"
 )
 
-// var Game game.Game = game.NewGame(9)
-// var color = "black"
-
-// func main() {
-// setupPoints := []game.Point{
-// {X: 1, Y: 2, Color: "black"},
-// {X: 2, Y: 2, Color: "white"},
-// {X: 7, Y: 4, Color: "black"},
-// {X: 2, Y: 3, Color: "white"},
-// {X: 7, Y: 5, Color: "black"},
-// {X: 0, Y: 2, Color: "white"},
-// {X: 3, Y: 2, Color: "black"},
-// {X: 8, Y: 5, Color: "white"},
-// {X: 0, Y: 2, Color: "black"},
-// }
-
-// for _, p := range setupPoints {
-// if Game.IsValidMove(p) {
-// Game.Play(p)
-// }
-// }
-
-// newMove := Move(Game, color)
-// fmt.Println(newMove)
-// }
 type scanContext struct {
 	game            game.Game
 	point           game.Point
@@ -365,20 +338,6 @@ func (u *UniqueRand) Coord() [2]int {
 		}
 	}
 }
-
-// func (u *UniqueRand) Coord() [2]int {
-// 	if u.scope > 0 && len(u.generated) >= u.scope*u.scope {
-// 		return [2]int{-1, -1}
-// 	}
-// 	for {
-// 		var x int = u.rng.Int() % u.scope
-// 		var y int = u.rng.Int() % u.scope
-// 		if !u.generated[[2]int{x, y}] {
-// 			u.generated[[2]int{x, y}] = true
-// 			return [2]int{x, y}
-// 		}
-// 	}
-// }
 
 // pick a random move from list of moves
 func SelectMove(color string, moves []game.Point) game.Point {
