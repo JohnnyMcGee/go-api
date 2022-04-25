@@ -14,7 +14,7 @@ func main() {
 	Game = handleNewGame(9)
 	router := gin.Default()
 	config := cors.DefaultConfig()
-	config.AllowOrigins = []string{"http://localhost:3000"}
+	config.AllowOrigins = []string{"*"}
 	router.Use(cors.New(config))
 	router.GET("/board", getBoard)
 	router.GET("/groups", getGroups)
@@ -29,7 +29,7 @@ func main() {
 	router.GET("/player-move/:color", getPlayerMove)
 	router.GET("/random-move/:color", getRandomMove)
 	router.POST("/moves", postMove)
-	router.Run("localhost:8080")
+	router.Run("0.0.0.0:8080")
 }
 
 var Game game.Game
